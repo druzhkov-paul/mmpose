@@ -2,6 +2,7 @@ chumpy
 dataclasses; python_version == '3.6'
 json_tricks
 matplotlib
+mmcv
 munkres
 numpy
 opencv-python
