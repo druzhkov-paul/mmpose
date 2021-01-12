@@ -8,5 +8,5 @@ numpy
 opencv-python
 pillow
 scipy
-torchvision
+torchvision==0.6.1+cu101
 xtcocotools>=1.6
