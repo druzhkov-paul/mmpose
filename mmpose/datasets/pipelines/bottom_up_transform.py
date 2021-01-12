@@ -177,6 +177,38 @@ def _resize_align_multi_scale_udp(image, input_size, current_scale, min_scale):
     return image_resized, center, scale
 
 
+class HeatmapGeneratorCustom:
+    def __init__(self, output_res, num_joints, sigma=-1):
+        self.output_res = output_res
+        self.num_joints = num_joints
+        if sigma < 0:
+            sigma = self.output_res / 64
+        # TODO. make sigma keypoint and scale dependent.
+        self.sigma = sigma
+        self.x = np.arange(0, output_res, 1, np.float32)[None, :]
+        self.y = np.arange(0, output_res, 1, np.float32)[:, None]
+
+    def __call__(self, joints):
+        hms = np.zeros((self.num_joints, self.output_res, self.output_res),
+                       dtype=np.float32)
+        sigma = self.sigma
+        for p in joints:
+            for idx, pt in enumerate(p):
+                if pt[2] > 0:
+                    x, y = pt[0], pt[1]
+                    # if x < 0 or y < 0 or \
+                    #    x >= self.output_res or y >= self.output_res:
+                    #     continue
+
+                    s = -0.5 / (sigma ** 2)
+                    kx = np.exp((self.x - x) ** 2 * s)
+                    ky = np.exp((self.y - y) ** 2 * s)
+                    g = kx * ky
+
+                    hms[idx, ...] = np.maximum(hms[idx, ...], g)
+        return hms
+
+
 class HeatmapGenerator:
     """Generate heatmaps for bottom-up models.
 
@@ -495,9 +527,13 @@ class BottomUpGenerateTarget:
     def _generate(self, num_joints, heatmap_size):
         """Get heatmap generator and joint encoder."""
         heatmap_generator = [
-            HeatmapGenerator(output_size, num_joints, self.sigma, self.use_udp)
+            HeatmapGeneratorCustom(output_size, num_joints, self.sigma)
             for output_size in heatmap_size
         ]
+        # heatmap_generator = [
+        #     HeatmapGenerator(output_size, num_joints, self.sigma, self.use_udp)
+        #     for output_size in heatmap_size
+        # ]
         joints_encoder = [
             JointsEncoder(self.max_num_people, num_joints, output_size, True)
             for output_size in heatmap_size
