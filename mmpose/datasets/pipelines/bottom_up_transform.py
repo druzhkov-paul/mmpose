@@ -80,15 +80,16 @@ def _get_multi_scale_size(image,
             Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
 
     Returns:
-        tuple: A tuple containing multi-scale sizes.
-
         - (w_resized, h_resized) (tuple(int)): resized width/height
-        - center (np.ndarray)image center
+        - center (np.ndarray): image center
         - scale (np.ndarray): scales wrt width/height
     """
     h, w, _ = image.shape
 
     # calculate the size for min_scale
+    # TODO. Why is it 64???
+    # FIXME. Is ceiling here correct? Should not the result be rounded up instead of some intermediate value?
+    # TODO. Scales and size are not consistent.
     min_input_size = _ceil_to_multiples_of(min_scale * input_size, 64)
     if w < h:
         w_resized = int(min_input_size * current_scale / min_scale)
@@ -156,7 +157,7 @@ def _resize_align_multi_scale_udp(image, input_size, current_scale, min_scale):
     Returns:
         tuple: A tuple containing image info.
 
-        - image_resized (tuple): size of resize image
+        - image_resized (np.ndarray): resized image
         - center (np.ndarray): center of image
         - scale (np.ndarray): scale
     """
@@ -171,6 +172,11 @@ def _resize_align_multi_scale_udp(image, input_size, current_scale, min_scale):
         size_input=np.array(scale, dtype=np.float),
         size_dst=np.array(size_resized, dtype=np.float) - 1.0,
         size_target=np.array(scale, dtype=np.float))
+    # print(f'scale = {scale}')
+    # print(f'size_resized = {size_resized}')
+    # print(trans)
+    # print(cv2.invertAffineTransform(trans))
+    # print((image.shape[1] - 1, image.shape[0] - 1), '->', (trans @ np.array([image.shape[1] - 1, image.shape[0] - 1, 1], dtype=np.float)[:, None])[:, 0])
     image_resized = cv2.warpAffine(
         image.copy(), trans, size_resized, flags=cv2.INTER_LINEAR)
 
@@ -368,7 +374,6 @@ class BottomUpRandomAffine:
         scale_factor (float): Scaling to [1-scale_factor, 1+scale_factor]
         scale_type: wrt ``long`` or ``short`` length of the image.
         trans_factor: Translation factor.
-        scale_aware_sigma: Option to use scale-aware sigma
         use_udp (bool): To use unbiased data processing.
             Paper ref: Huang et al. The Devil is in the Details: Delving into
             Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
@@ -429,6 +434,11 @@ class BottomUpRandomAffine:
                                                     len(self.output_size),
                                                     self.output_size)
 
+        # print(results['ann_info'])
+        # print(image.shape)
+        # print(self.output_size)
+        # print('-' * 30)
+
         height, width = image.shape[:2]
         if self.use_udp:
             center = np.array(((width - 1.0) / 2, (height - 1.0) / 2))
@@ -442,6 +452,7 @@ class BottomUpRandomAffine:
             raise ValueError('Unknown scale type: {}'.format(self.scale_type))
         aug_scale = np.random.random() * (self.max_scale - self.min_scale) \
             + self.min_scale
+        # aug_scale = 1.0
         scale *= aug_scale
         aug_rot = (np.random.random() * 2 - 1) * self.max_rotation
 
@@ -455,12 +466,17 @@ class BottomUpRandomAffine:
             center[1] += dy
         if self.use_udp:
             for i, _output_size in enumerate(self.output_size):
+                # aug_rot = 0.0
                 trans = get_warp_matrix(
                     theta=aug_rot,
-                    size_input=center * 2.0,
+                    # center might be affected by translation augmentation.
+                    size_input=np.array((width - 1, height - 1), dtype=np.float),
                     size_dst=np.array(
                         (_output_size, _output_size), dtype=np.float) - 1.0,
                     size_target=np.array((scale, scale), dtype=np.float))
+                # print(f'output size: {_output_size}')
+                # print(trans)
+                # print(cv2.invertAffineTransform(trans))
                 mask[i] = cv2.warpAffine(
                     (mask[i] * 255).astype(np.uint8),
                     trans, (int(_output_size), int(_output_size)),
@@ -472,10 +488,15 @@ class BottomUpRandomAffine:
                     joints[i][:, :, 3] = joints[i][:, :, 3] / aug_scale
             mat_input = get_warp_matrix(
                 theta=aug_rot,
-                size_input=center * 2.0,
+                # center might be affected by translation augmentation.
+                size_input=np.array((width - 1, height - 1), dtype=np.float),
                 size_dst=np.array(
                     (self.input_size, self.input_size), dtype=np.float) - 1.0,
                 size_target=np.array((scale, scale), dtype=np.float))
+            # print(f'input size: {self.input_size}')
+            # print(f'scale: {scale}')
+            # print(mat_input)
+            # print(cv2.invertAffineTransform(mat_input))
             image = cv2.warpAffine(
                 image,
                 mat_input, (int(self.input_size), int(self.input_size)),
@@ -653,10 +674,19 @@ class BottomUpResizeAlign:
         test_scale_factor = results['ann_info']['test_scale_factor']
         aug_data = []
 
+        # print(f'test_scale_factors = {test_scale_factor}')
+        # print('*' * 30)
         for _, s in enumerate(sorted(test_scale_factor, reverse=True)):
             _results = results.copy()
+            # print('-' * 30)
+            # print(f'scale = {s}')
+            # print(f'net input size = {input_size}')
+            # img_shape = _results['img'].shape
+            # print(f'image shape = {img_shape}')
             image_resized, _, _ = self._resize_align_multi_scale(
                 _results['img'], input_size, s, min(test_scale_factor))
+            # print(f'resize image shape = {image_resized.shape}')
+            # print('=' * 30)
             _results['img'] = image_resized
             _results = self.transforms(_results)
             transformed_img = _results['img'].unsqueeze(0)

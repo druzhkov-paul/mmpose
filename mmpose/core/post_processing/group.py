@@ -149,6 +149,8 @@ class HeatmapParser:
         self.pool = torch.nn.MaxPool2d(cfg['nms_kernel'], 1,
                                        cfg['nms_padding'])
         self.use_udp = cfg.get('use_udp', False)
+        # self.use_udp = False
+        self.delta = 0.0
 
     def nms(self, heatmaps):
         """Non-Maximum Suppression for heatmaps.
@@ -238,8 +240,7 @@ class HeatmapParser:
 
         return ans
 
-    @staticmethod
-    def adjust(ans, heatmaps):
+    def adjust(self, ans, heatmaps):
         """Adjust the coordinates for better accuracy.
 
         Note:
@@ -272,11 +273,10 @@ class HeatmapParser:
                         else:
                             x -= 0.25
                         ans[batch_id][people_id, joint_id,
-                                      0:2] = (x + 0.5, y + 0.5)
+                                      0:2] = (x + self.delta, y + self.delta)
         return ans
 
-    @staticmethod
-    def refine(heatmap, tag, keypoints, use_udp=False):
+    def refine(self, heatmap, tag, keypoints, use_udp=False):
         """Given initial keypoint predictions, we identify missing joints.
 
         Note:
@@ -327,8 +327,8 @@ class HeatmapParser:
             val = _heatmap[y, x]
             if not use_udp:
                 # offset by 0.5
-                x += 0.5
-                y += 0.5
+                x += self.delta
+                y += self.delta
 
             # add a quarter offset
             if _heatmap[yy, min(W - 1, xx + 1)] > _heatmap[yy, max(0, xx - 1)]:

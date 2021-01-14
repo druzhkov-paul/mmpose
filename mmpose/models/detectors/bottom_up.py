@@ -77,9 +77,9 @@ class BottomUp(BasePose):
             batch_size: N
             num_keypoints: K
             num_img_channel: C
-            img_weight: imgW
+            img_width: imgW
             img_height: imgH
-            heatmaps weight: W
+            heatmaps width: W
             heatmaps height: H
             max_num_people: M
         Args:
@@ -246,7 +246,9 @@ class BottomUp(BasePose):
                 img_metas['flip_index'],
                 self.test_cfg['project2image'],
                 base_size,
-                align_corners=self.use_udp)
+                # This does not depend on the data processing.
+                # It depends on the network itself.
+                align_corners=False)
 
             aggregated_heatmaps, tags_list = aggregate_results(
                 s,
@@ -257,7 +259,7 @@ class BottomUp(BasePose):
                 test_scale_factor,
                 self.test_cfg['project2image'],
                 self.test_cfg['flip_test'],
-                align_corners=self.use_udp)
+                align_corners=False)
 
         # average heatmaps of different scales
         aggregated_heatmaps = aggregated_heatmaps / float(
