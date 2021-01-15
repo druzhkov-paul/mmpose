@@ -8,34 +8,34 @@ from mmpose.datasets.registry import PIPELINES
 from .shared_transform import Compose
 
 
-def get_warp_matrix(theta, size_input, size_dst, size_target):
+def get_warp_matrix(theta, roi_center, size_dst, roi_size):
     """Calculate the transformation matrix under the constraint of unbiased.
     Paper ref: Huang et al. The Devil is in the Details: Delving into Unbiased
     Data Processing for Human Pose Estimation (CVPR 2020).
 
     Args:
         theta (float): Rotation angle in degrees.
-        size_input (np.ndarray): Size of input image [w, h].
+        roi_center (np.ndarray): Size of input image [w, h].
         size_dst (np.ndarray): Size of output image [w, h].
-        size_target (np.ndarray): Size of ROI in input plane [w, h].
+        roi_size (np.ndarray): Size of ROI in input plane [w, h].
 
     Returns:
         matrix (np.ndarray): A matrix for transformation.
     """
     theta = np.deg2rad(theta)
     matrix = np.zeros((2, 3), dtype=np.float32)
-    scale_x = size_dst[0] / size_target[0]
-    scale_y = size_dst[1] / size_target[1]
+    scale_x = size_dst[0] / roi_size[0]
+    scale_y = size_dst[1] / roi_size[1]
     matrix[0, 0] = math.cos(theta) * scale_x
     matrix[0, 1] = -math.sin(theta) * scale_x
-    matrix[0, 2] = scale_x * (-0.5 * size_input[0] * math.cos(theta) +
-                              0.5 * size_input[1] * math.sin(theta) +
-                              0.5 * size_target[0])
+    matrix[0, 2] = scale_x * (-roi_center[0] * math.cos(theta) +
+                              roi_center[1] * math.sin(theta) +
+                              0.5 * roi_size[0])
     matrix[1, 0] = math.sin(theta) * scale_y
     matrix[1, 1] = math.cos(theta) * scale_y
-    matrix[1, 2] = scale_y * (-0.5 * size_input[0] * math.sin(theta) -
-                              0.5 * size_input[1] * math.cos(theta) +
-                              0.5 * size_target[1])
+    matrix[1, 2] = scale_y * (-roi_center[0] * math.sin(theta) -
+                              roi_center[1] * math.cos(theta) +
+                              0.5 * roi_size[1])
     return matrix
 
 
@@ -169,9 +169,9 @@ def _resize_align_multi_scale_udp(image, input_size, current_scale, min_scale):
 
     trans = get_warp_matrix(
         theta=0,
-        size_input=np.array(scale, dtype=np.float),
+        roi_center=np.array(scale, dtype=np.float) / 2,
         size_dst=np.array(size_resized, dtype=np.float) - 1.0,
-        size_target=np.array(scale, dtype=np.float))
+        roi_size=np.array(scale, dtype=np.float))
     # print(f'scale = {scale}')
     # print(f'size_resized = {size_resized}')
     # print(trans)
@@ -455,6 +455,7 @@ class BottomUpRandomAffine:
         # aug_scale = 1.0
         scale *= aug_scale
         aug_rot = (np.random.random() * 2 - 1) * self.max_rotation
+        # aug_rot = 0.0
 
         if self.trans_factor > 0:
             dx = np.random.randint(-self.trans_factor * scale / 200.0,
@@ -466,14 +467,12 @@ class BottomUpRandomAffine:
             center[1] += dy
         if self.use_udp:
             for i, _output_size in enumerate(self.output_size):
-                # aug_rot = 0.0
                 trans = get_warp_matrix(
                     theta=aug_rot,
-                    # center might be affected by translation augmentation.
-                    size_input=np.array((width - 1, height - 1), dtype=np.float),
+                    roi_center=center,
                     size_dst=np.array(
                         (_output_size, _output_size), dtype=np.float) - 1.0,
-                    size_target=np.array((scale, scale), dtype=np.float))
+                    roi_size=np.array((scale, scale), dtype=np.float))
                 # print(f'output size: {_output_size}')
                 # print(trans)
                 # print(cv2.invertAffineTransform(trans))
@@ -488,19 +487,21 @@ class BottomUpRandomAffine:
                     joints[i][:, :, 3] = joints[i][:, :, 3] / aug_scale
             mat_input = get_warp_matrix(
                 theta=aug_rot,
-                # center might be affected by translation augmentation.
-                size_input=np.array((width - 1, height - 1), dtype=np.float),
+                roi_center=center,
                 size_dst=np.array(
                     (self.input_size, self.input_size), dtype=np.float) - 1.0,
-                size_target=np.array((scale, scale), dtype=np.float))
+                roi_size=np.array((scale, scale), dtype=np.float))
             # print(f'input size: {self.input_size}')
             # print(f'scale: {scale}')
             # print(mat_input)
             # print(cv2.invertAffineTransform(mat_input))
+            # cv2.imshow('orig', image)
             image = cv2.warpAffine(
                 image,
                 mat_input, (int(self.input_size), int(self.input_size)),
                 flags=cv2.INTER_LINEAR)
+            # cv2.imshow('warped', image)
+            # cv2.waitKey(0)
         else:
             for i, _output_size in enumerate(self.output_size):
                 mat_output = self._get_affine_matrix(center, scale,
