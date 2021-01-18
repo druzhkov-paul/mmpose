@@ -528,6 +528,257 @@ class BottomUpRandomAffine:
 
         return results
 
+import mmcv
+try:
+    import albumentations
+    from albumentations import Compose
+except ImportError:
+    albumentations = None
+    Compose = None
+
+@PIPELINES.register_module
+class Albu(object):
+
+    def __init__(self,
+                 transforms,
+                 bbox_params=None,
+                 scales=(4, 2),
+                 kp_params=None,
+                 keymap=None,
+                 update_pad_shape=False,
+                 skip_img_without_anno=False):
+        """
+        Adds custom transformations from Albumentations lib.
+        Please, visit `https://albumentations.readthedocs.io`
+        to get more information.
+
+        transforms (list): list of albu transformations
+        bbox_params (dict): bbox_params for albumentation `Compose`
+        keymap (dict): contains {'input key':'albumentation-style key'}
+        skip_img_without_anno (bool): whether to skip the image
+                                      if no ann left after aug
+        """
+        if Compose is None:
+            raise RuntimeError('albumentations is not installed')
+
+        self.transforms = transforms
+        self.filter_lost_elements = False
+        self.kp_filter_lost_elements = False
+        self.update_pad_shape = update_pad_shape
+        self.skip_img_without_anno = skip_img_without_anno
+        self.scales = scales
+
+        # A simple workaround to remove masks without boxes
+        if bbox_params is not None:
+            if 'label_fields' in bbox_params and bbox_params.get('filter_lost_elements', False):
+                self.filter_lost_elements = True
+                self.origin_label_fields = bbox_params['label_fields']
+                bbox_params['label_fields'] = ['idx_mapper']
+            if 'filter_lost_elements' in bbox_params:
+                del bbox_params['filter_lost_elements']
+
+        if kp_params is not None:
+            if 'label_fields' in kp_params and kp_params.get('filter_lost_elements', False):
+                self.kp_filter_lost_elements = True
+                self.origin_label_fields = kp_params['label_fields']
+                kp_params['label_fields'] = ['kp_idx_mapper']
+            if 'filter_lost_elements' in kp_params:
+                del kp_params['filter_lost_elements']
+
+        self.bbox_params = self.albu_builder(bbox_params) if bbox_params else None
+        self.kp_params = self.albu_builder(kp_params) if kp_params else None
+        self.aug = Compose([self.albu_builder(t) for t in self.transforms],
+                           bbox_params=self.bbox_params,
+                           keypoint_params=self.kp_params)
+
+        if not keymap:
+            self.keymap_to_albu = {
+                'img': 'image',
+                'gt_masks': 'masks',
+                'gt_bboxes': 'bboxes',
+                'gt_keypoints': 'keypoints'
+            }
+        else:
+            self.keymap_to_albu = keymap
+        self.keymap_back = {v: k for k, v in self.keymap_to_albu.items()}
+
+        print(self)
+
+    def albu_builder(self, cfg):
+        """Import a module from albumentations.
+        Inherits some of `build_from_cfg` logic.
+
+        Args:
+            cfg (dict): Config dict. It should at least contain the key "type".
+        Returns:
+            obj: The constructed object.
+        """
+        assert isinstance(cfg, dict) and "type" in cfg
+        args = cfg.copy()
+
+        obj_type = args.pop("type")
+        if mmcv.is_str(obj_type):
+            if albumentations is None:
+                raise RuntimeError('albumentations is not installed')
+            obj_cls = getattr(albumentations, obj_type)
+        elif inspect.isclass(obj_type):
+            obj_cls = obj_type
+        else:
+            raise TypeError(
+                'type must be a str or valid type, but got {}'.format(
+                    type(obj_type)))
+
+        if 'transforms' in args:
+            args['transforms'] = [
+                self.albu_builder(transform)
+                for transform in args['transforms']
+            ]
+
+        return obj_cls(**args)
+
+    @staticmethod
+    def mapper(d, keymap):
+        """
+        Dictionary mapper.
+        Renames keys according to keymap provided.
+
+        Args:
+            d (dict): old dict
+            keymap (dict): {'old_key':'new_key'}
+        Returns:
+            dict: new dict.
+        """
+        updated_dict = {}
+        for k, v in zip(d.keys(), d.values()):
+            new_k = keymap.get(k, k)
+            updated_dict[new_k] = d[k]
+        return updated_dict
+
+    def __call__(self, results):
+        # dict to albumentations format
+        results = self.mapper(results, self.keymap_to_albu)
+
+        # print('# of masks before transforms: ', results['masks'].shape)
+
+        if 'bboxes' in results:
+            # to list of boxes
+            if isinstance(results['bboxes'], np.ndarray):
+                results['bboxes'] = [x for x in results['bboxes']]
+            # add pseudo-field for filtration
+            if self.filter_lost_elements:
+                results['idx_mapper'] = np.arange(len(results['bboxes']))
+
+        if 'keypoints' in results:
+            assert len(results['keypoints']) == len(self.scales)
+            results['keypoints'] = np.concatenate(results['keypoints'], axis=0)
+            keypoints_per_instance = results['keypoints'].shape[1]
+            # print(results['keypoints'].shape)
+            results['keypoints_visibility'] = results['keypoints'][:, :, 2]
+            results['keypoints'] = results['keypoints'][:, :, :2].reshape(-1, 2)
+            # print(results['keypoints'].shape)
+            results['keypoints'] = results['keypoints'].tolist()
+            keypoints_num = len(results['keypoints'])
+            # print(keypoints_num)
+            if self.kp_filter_lost_elements:
+                results['kp_idx_mapper'] = np.arange(keypoints_num)
+
+        if 'masks' in results:
+            masks = results['masks']
+            for i, m in enumerate(masks):
+                masks[i] = m.astype(np.uint8)
+        # if 'masks' in results:
+            # assert len(results['masks']) == len(self.scales)
+            # print(len(results['masks']))
+            # print(results['masks'][0].shape)
+            # for x, y in zip(*results['masks']):
+            #     assert x.shape == y.shape
+            # results['masks'] = list(m for m in results['masks'][0])
+            # print(len(results['masks']))
+            # print(results['masks'][0].shape)
+            # results['masks'] = np.concatenate(results['masks'], axis=0)
+
+        results = self.aug(**results)
+
+        if 'bboxes' in results:
+            if isinstance(results['bboxes'], list):
+                results['bboxes'] = np.array(
+                    results['bboxes'], dtype=np.float32)
+            results['bboxes'] = results['bboxes'].reshape(-1, 4)
+
+            # filter label_fields
+            if self.filter_lost_elements:
+                # print('filter lost bboxes')
+
+                results['idx_mapper'] = np.arange(len(results['bboxes']))
+
+                for label in self.origin_label_fields:
+                    results[label] = np.array(
+                        [results[label][i] for i in results['idx_mapper']])
+                if 'masks' in results:
+                    results['masks'] = np.array(
+                        [results['masks'][i] for i in results['idx_mapper']])
+
+                if (not len(results['idx_mapper'])
+                        and self.skip_img_without_anno):
+                    return None
+
+        if 'masks' in results:
+            # results['masks'] = np.asarray(results['masks'])
+            # print('# of masks after transforms: ', results['masks'].shape)
+            # results['masks'] = np.split(results['masks'], len(self.scales), axis=0)
+            # m = np.concatenate(results['masks'])
+            # results['masks'] = list(m.copy() for _ in self.scales)
+
+            for i, s in enumerate(self.scales):
+                w, h = results['masks'][i].shape
+                results['masks'][i] = cv2.resize(results['masks'][i], dsize=(int(w / s), int(h / s)), interpolation=cv2.INTER_NEAREST).astype(np.bool)
+
+        if 'keypoints' in results:
+            results['keypoints'] = np.asarray(results['keypoints'], dtype=np.float32)
+            # print(results['keypoints'].shape)
+
+            if self.kp_filter_lost_elements:
+                idx = np.asarray(results['kp_idx_mapper'], dtype=np.long)
+                kps = np.zeros([keypoints_num, 2], dtype=np.float32)
+                # print(kps.shape)
+                if len(idx) > 0:
+                    kps[idx, ...] = results['keypoints']
+                results['keypoints'] = kps
+
+                visibility = np.zeros(keypoints_num, dtype=np.float32)
+                visibility[idx] = results['keypoints_visibility'].flatten()[idx]
+                results['keypoints_visibility'] = visibility.reshape(-1, keypoints_per_instance)
+
+                # results['kp_idx_mapper'] = np.arange(len(results['keypoints']))
+                # if (not len(results['kp_idx_mapper']) and self.skip_img_without_anno):
+                #     return None
+
+            # print(results['keypoints'].shape)
+            results['keypoints'] = results['keypoints'].reshape(-1, keypoints_per_instance, 2)
+            results['keypoints'] = np.concatenate([results['keypoints'], results['keypoints_visibility'][:, :, None]], axis=2)
+            results['keypoints'] = np.split(results['keypoints'], len(self.scales), axis=0)
+            for i, s in enumerate(self.scales):
+                results['keypoints'][i] /= s
+
+        if 'gt_labels' in results:
+            if isinstance(results['gt_labels'], list):
+                results['gt_labels'] = np.array(results['gt_labels'])
+            results['gt_labels'] = results['gt_labels'].astype(np.int64)
+
+        # back to the original format
+        results = self.mapper(results, self.keymap_back)
+
+        # update final shape
+        if self.update_pad_shape:
+            results['pad_shape'] = results['img'].shape
+
+        return results
+
+    def __repr__(self):
+        repr_str = self.__class__.__name__
+        repr_str += '(transforms={})'.format(self.transforms)
+        return repr_str
+
 
 @PIPELINES.register_module()
 class BottomUpGenerateTarget:
