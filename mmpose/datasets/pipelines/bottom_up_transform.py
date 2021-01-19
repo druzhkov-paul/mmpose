@@ -1,7 +1,12 @@
 import math
 
 import cv2
+import mmcv
 import numpy as np
+try:
+    import albumentations
+except ImportError:
+    albumentations = None
 
 from mmpose.core.post_processing import get_affine_transform
 from mmpose.datasets.registry import PIPELINES
@@ -528,16 +533,9 @@ class BottomUpRandomAffine:
 
         return results
 
-import mmcv
-try:
-    import albumentations
-    from albumentations import Compose
-except ImportError:
-    albumentations = None
-    Compose = None
 
-@PIPELINES.register_module
-class Albu(object):
+@PIPELINES.register_module()
+class Albu:
 
     def __init__(self,
                  transforms,
@@ -558,7 +556,7 @@ class Albu(object):
         skip_img_without_anno (bool): whether to skip the image
                                       if no ann left after aug
         """
-        if Compose is None:
+        if albumentations is None:
             raise RuntimeError('albumentations is not installed')
 
         self.transforms = transforms
@@ -587,7 +585,7 @@ class Albu(object):
 
         self.bbox_params = self.albu_builder(bbox_params) if bbox_params else None
         self.kp_params = self.albu_builder(kp_params) if kp_params else None
-        self.aug = Compose([self.albu_builder(t) for t in self.transforms],
+        self.aug = albumentations.Compose([self.albu_builder(t) for t in self.transforms],
                            bbox_params=self.bbox_params,
                            keypoint_params=self.kp_params)
 
