@@ -72,7 +72,8 @@ def _get_multi_scale_size(image,
                           input_size,
                           current_scale,
                           min_scale,
-                          use_udp=False):
+                          use_udp=False,
+                          size_divisor=64):
     """Get the size for multi-scale training.
 
     Args:
@@ -92,14 +93,11 @@ def _get_multi_scale_size(image,
     h, w, _ = image.shape
 
     # calculate the size for min_scale
-    # TODO. Why is it 64???
-    # FIXME. Is ceiling here correct? Should not the result be rounded up instead of some intermediate value?
-    # TODO. Scales and size are not consistent.
-    min_input_size = _ceil_to_multiples_of(min_scale * input_size, 64)
+    min_input_size = _ceil_to_multiples_of(min_scale * input_size, size_divisor)
     if w < h:
         w_resized = int(min_input_size * current_scale / min_scale)
         h_resized = int(
-            _ceil_to_multiples_of(min_input_size / w * h, 64) * current_scale /
+            _ceil_to_multiples_of(min_input_size / w * h, size_divisor) * current_scale /
             min_scale)
         if use_udp:
             scale_w = w - 1.0
@@ -110,7 +108,7 @@ def _get_multi_scale_size(image,
     else:
         h_resized = int(min_input_size * current_scale / min_scale)
         w_resized = int(
-            _ceil_to_multiples_of(min_input_size / h * w, 64) * current_scale /
+            _ceil_to_multiples_of(min_input_size / h * w, size_divisor) * current_scale /
             min_scale)
         if use_udp:
             scale_h = h - 1.0
@@ -125,7 +123,7 @@ def _get_multi_scale_size(image,
     return (w_resized, h_resized), center, np.array([scale_w, scale_h])
 
 
-def _resize_align_multi_scale(image, input_size, current_scale, min_scale):
+def _resize_align_multi_scale(image, input_size, current_scale, min_scale, size_divisor):
     """Resize the images for multi-scale training.
 
     Args:
@@ -142,7 +140,7 @@ def _resize_align_multi_scale(image, input_size, current_scale, min_scale):
         - scale (np.ndarray): scale
     """
     size_resized, center, scale = _get_multi_scale_size(
-        image, input_size, current_scale, min_scale)
+        image, input_size, current_scale, min_scale, False, size_divisor)
 
     trans = get_affine_transform(center, scale, 0, size_resized)
     image_resized = cv2.warpAffine(image, trans, size_resized)
@@ -150,7 +148,7 @@ def _resize_align_multi_scale(image, input_size, current_scale, min_scale):
     return image_resized, center, scale
 
 
-def _resize_align_multi_scale_udp(image, input_size, current_scale, min_scale):
+def _resize_align_multi_scale_udp(image, input_size, current_scale, min_scale, size_divisor):
     """Resize the images for multi-scale training.
 
     Args:
@@ -167,10 +165,10 @@ def _resize_align_multi_scale_udp(image, input_size, current_scale, min_scale):
         - scale (np.ndarray): scale
     """
     size_resized, _, _ = _get_multi_scale_size(image, input_size,
-                                               current_scale, min_scale, True)
+                                               current_scale, min_scale, True, size_divisor)
 
     _, center, scale = _get_multi_scale_size(image, input_size, min_scale,
-                                             min_scale, True)
+                                             min_scale, True, size_divisor)
 
     trans = get_warp_matrix(
         theta=0,
@@ -729,7 +727,7 @@ class Albu:
 
             for i, s in enumerate(self.scales):
                 w, h = results['masks'][i].shape
-                results['masks'][i] = cv2.resize(results['masks'][i], dsize=(int(w / s), int(h / s)), interpolation=cv2.INTER_NEAREST).astype(np.bool)
+                results['masks'][i] = cv2.resize(results['masks'][i], dsize=(int(w / s), int(h / s)), interpolation=cv2.INTER_LINEAR) > 0.5
 
         if 'keypoints' in results:
             results['keypoints'] = np.asarray(results['keypoints'], dtype=np.float32)
@@ -756,7 +754,7 @@ class Albu:
             results['keypoints'] = np.concatenate([results['keypoints'], results['keypoints_visibility'][:, :, None]], axis=2)
             results['keypoints'] = np.split(results['keypoints'], len(self.scales), axis=0)
             for i, s in enumerate(self.scales):
-                results['keypoints'][i] /= s
+                results['keypoints'][i][:, :2] /= s
 
         if 'gt_labels' in results:
             if isinstance(results['gt_labels'], list):
@@ -849,11 +847,12 @@ class BottomUpGetImgSize:
             Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
     """
 
-    def __init__(self, test_scale_factor, current_scale=1, use_udp=False):
+    def __init__(self, test_scale_factor, current_scale=1, use_udp=False, size_divisor=64):
         self.test_scale_factor = test_scale_factor
         self.min_scale = min(test_scale_factor)
         self.current_scale = current_scale
         self.use_udp = use_udp
+        self.size_divisor = size_divisor
 
     def __call__(self, results):
         """Get multi-scale image sizes for bottom-up."""
@@ -863,12 +862,12 @@ class BottomUpGetImgSize:
         h, w, _ = img.shape
 
         # calculate the size for min_scale
-        min_input_size = _ceil_to_multiples_of(self.min_scale * input_size, 64)
+        min_input_size = _ceil_to_multiples_of(self.min_scale * input_size, self.size_divisor)
         if w < h:
             w_resized = int(min_input_size * self.current_scale /
                             self.min_scale)
             h_resized = int(
-                _ceil_to_multiples_of(min_input_size / w * h, 64) *
+                _ceil_to_multiples_of(min_input_size / w * h, self.size_divisor) *
                 self.current_scale / self.min_scale)
             if self.use_udp:
                 scale_w = w - 1.0
@@ -880,7 +879,7 @@ class BottomUpGetImgSize:
             h_resized = int(min_input_size * self.current_scale /
                             self.min_scale)
             w_resized = int(
-                _ceil_to_multiples_of(min_input_size / h * w, 64) *
+                _ceil_to_multiples_of(min_input_size / h * w, self.size_divisor) *
                 self.current_scale / self.min_scale)
             if self.use_udp:
                 scale_h = h - 1.0
@@ -911,8 +910,9 @@ class BottomUpResizeAlign:
             Unbiased Data Processing for Human Pose Estimation (CVPR 2020).
     """
 
-    def __init__(self, transforms, use_udp=False):
+    def __init__(self, transforms, use_udp=False, size_divisor=64):
         self.transforms = Compose(transforms)
+        self.size_divisor = size_divisor
         if use_udp:
             self._resize_align_multi_scale = _resize_align_multi_scale_udp
         else:
@@ -934,7 +934,7 @@ class BottomUpResizeAlign:
             # img_shape = _results['img'].shape
             # print(f'image shape = {img_shape}')
             image_resized, _, _ = self._resize_align_multi_scale(
-                _results['img'], input_size, s, min(test_scale_factor))
+                _results['img'], input_size, s, min(test_scale_factor), self.size_divisor)
             # print(f'resize image shape = {image_resized.shape}')
             # print('=' * 30)
             _results['img'] = image_resized

@@ -10,6 +10,7 @@ from mmcv.visualization.image import imshow
 from mmpose.core.evaluation import (aggregate_results, get_group_preds,
                                     get_multi_stage_outputs)
 from mmpose.core.post_processing.group import HeatmapParser
+from mmpose.core.post_processing.decoder_ae import AssociativeEmbeddingDecoder
 from mmpose.models.builder import build_loss
 from .. import builder
 from ..registry import POSENETS
@@ -46,7 +47,21 @@ class BottomUp(BasePose):
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
         self.use_udp = test_cfg.get('use_udp', False)
+        self.decoder = AssociativeEmbeddingDecoder(
+            num_joints=self.test_cfg['num_joints'],
+            max_num_people=30,
+            detection_threshold=0.1,
+            use_detection_val=True,
+            ignore_too_much=False,
+            tag_threshold=1.0,
+            adjust=self.test_cfg['adjust'],
+            refine=self.test_cfg['refine'],
+            delta=0.0
+        )
         self.parser = HeatmapParser(self.test_cfg)
+
+        nms_kernel = 5
+        self.kpts_nms_pool = torch.nn.MaxPool2d(nms_kernel, 1, (nms_kernel - 1) // 2)
 
         self.loss = build_loss(loss_pose)
         self.init_weights(pretrained=pretrained)
@@ -267,9 +282,15 @@ class BottomUp(BasePose):
         tags = torch.cat(tags_list, dim=4)
 
         # perform grouping
-        grouped, scores = self.parser.parse(aggregated_heatmaps, tags,
-                                            self.test_cfg['adjust'],
-                                            self.test_cfg['refine'])
+        maxm = self.kpts_nms_pool(aggregated_heatmaps)
+        maxm = torch.eq(maxm, aggregated_heatmaps).float()
+        nms_heatmaps = aggregated_heatmaps * maxm
+        grouped, scores = self.decoder(aggregated_heatmaps.cpu().numpy(), tags.cpu().numpy()[..., 0], nms_heatmaps.cpu().numpy())
+        grouped = [grouped]
+
+        # grouped, scores = self.parser.parse(aggregated_heatmaps, tags,
+        #                                     self.test_cfg['adjust'],
+        #                                     self.test_cfg['refine'])
 
         results = get_group_preds(
             grouped,

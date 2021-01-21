@@ -209,9 +209,9 @@ def get_group_preds(grouped_joints,
             heatmap_size_t = np.array(heatmap_size, dtype=np.float32) - 1.0
             trans = get_warp_matrix(
                 theta=0,
-                size_input=heatmap_size_t,
+                roi_center=heatmap_size_t,
                 size_dst=scale,
-                size_target=heatmap_size_t)
+                roi_size=heatmap_size_t)
             grouped_joints[0][..., :2] = \
                 warp_affine_joints(grouped_joints[0][..., :2], trans)
         results = [person for person in grouped_joints[0]]
