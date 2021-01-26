@@ -461,13 +461,11 @@ class BottomUpRandomAffine:
         # aug_rot = 0.0
 
         if self.trans_factor > 0:
-            dx = np.random.randint(-self.trans_factor * scale / 200.0,
-                                   self.trans_factor * scale / 200.0)
-            dy = np.random.randint(-self.trans_factor * scale / 200.0,
-                                   self.trans_factor * scale / 200.0)
-
+            dx = (2 * np.random.random() - 1) * self.trans_factor * width * aug_scale
+            dy = (2 * np.random.random() - 1) * self.trans_factor * height * aug_scale
             center[0] += dx
             center[1] += dy
+
         if self.use_udp:
             for i, _output_size in enumerate(self.output_size):
                 trans = get_warp_matrix(
@@ -564,22 +562,24 @@ class Albu:
         self.skip_img_without_anno = skip_img_without_anno
         self.scales = scales
 
-        # A simple workaround to remove masks without boxes
-        if bbox_params is not None:
-            if 'label_fields' in bbox_params and bbox_params.get('filter_lost_elements', False):
-                self.filter_lost_elements = True
-                self.origin_label_fields = bbox_params['label_fields']
-                bbox_params['label_fields'] = ['idx_mapper']
-            if 'filter_lost_elements' in bbox_params:
-                del bbox_params['filter_lost_elements']
+        # # A simple workaround to remove masks without boxes
+        # if bbox_params is not None:
+        #     if 'label_fields' in bbox_params and bbox_params.get('filter_lost_elements', False):
+        #         self.filter_lost_elements = True
+        #         self.origin_label_fields = bbox_params['label_fields']
+        #         bbox_params['label_fields'] = ['idx_mapper']
+        #     if 'filter_lost_elements' in bbox_params:
+        #         del bbox_params['filter_lost_elements']
 
         if kp_params is not None:
-            if 'label_fields' in kp_params and kp_params.get('filter_lost_elements', False):
-                self.kp_filter_lost_elements = True
-                self.origin_label_fields = kp_params['label_fields']
+            self.kp_filter_lost_elements = kp_params.get('filter_lost_elements', False)
+            if self.kp_filter_lost_elements:
+                self.origin_label_fields = []
+                if 'label_fields' in kp_params:
+                    self.origin_label_fields = kp_params['label_fields']
                 kp_params['label_fields'] = ['kp_idx_mapper']
-            if 'filter_lost_elements' in kp_params:
-                del kp_params['filter_lost_elements']
+                if 'filter_lost_elements' in kp_params:
+                    del kp_params['filter_lost_elements']
 
         self.bbox_params = self.albu_builder(bbox_params) if bbox_params else None
         self.kp_params = self.albu_builder(kp_params) if kp_params else None
@@ -590,7 +590,7 @@ class Albu:
         if not keymap:
             self.keymap_to_albu = {
                 'img': 'image',
-                'gt_masks': 'masks',
+                'gt_masks': 'mask',
                 'gt_bboxes': 'bboxes',
                 'gt_keypoints': 'keypoints'
             }
@@ -666,10 +666,10 @@ class Albu:
 
         if 'keypoints' in results:
             assert len(results['keypoints']) == len(self.scales)
-            results['keypoints'] = np.concatenate(results['keypoints'], axis=0)
+            results['keypoints'] = results['keypoints'][0]
             keypoints_per_instance = results['keypoints'].shape[1]
             # print(results['keypoints'].shape)
-            results['keypoints_visibility'] = results['keypoints'][:, :, 2]
+            results['keypoints_visibility'] = results['keypoints'][:, :, 2].reshape(-1)
             results['keypoints'] = results['keypoints'][:, :, :2].reshape(-1, 2)
             # print(results['keypoints'].shape)
             results['keypoints'] = results['keypoints'].tolist()
@@ -752,9 +752,10 @@ class Albu:
             # print(results['keypoints'].shape)
             results['keypoints'] = results['keypoints'].reshape(-1, keypoints_per_instance, 2)
             results['keypoints'] = np.concatenate([results['keypoints'], results['keypoints_visibility'][:, :, None]], axis=2)
-            results['keypoints'] = np.split(results['keypoints'], len(self.scales), axis=0)
+            # results['keypoints'] = np.split(results['keypoints'], len(self.scales), axis=0)
+            results['keypoints'] = [np.copy(results['keypoints']) for s in self.scales]
             for i, s in enumerate(self.scales):
-                results['keypoints'][i][:, :2] /= s
+                results['keypoints'][i][..., :2] /= s
 
         if 'gt_labels' in results:
             if isinstance(results['gt_labels'], list):
@@ -764,6 +765,83 @@ class Albu:
         # back to the original format
         results = self.mapper(results, self.keymap_back)
 
+        # update final shape
+        if self.update_pad_shape:
+            results['pad_shape'] = results['img'].shape
+
+        return results
+
+    def __callx__(self, results):
+        # dict to albumentations format
+        results = self.mapper(results, self.keymap_to_albu)
+
+        # Prepare keypoints.
+        if 'keypoints' in results:
+            assert len(results['keypoints']) == len(self.scales)
+            # Leave only the one scale.
+            results['keypoints'] = results['keypoints'][0]
+
+            keypoints_per_instance = results['keypoints'].shape[1]
+            results['keypoints_visibility'] = results['keypoints'][:, :, 2].reshape(-1)
+            results['keypoints'] = results['keypoints'][:, :, :2].reshape(-1, 2)
+            results['keypoints'] = results['keypoints'].tolist()
+            keypoints_num = len(results['keypoints'])
+            if self.kp_filter_lost_elements:
+                results['kp_idx_mapper'] = np.arange(keypoints_num)
+
+        # Prepare mask.
+        if 'mask' in results:
+            results['mask'] = results['mask'].astype(np.uint8)
+
+        # Apply transforms.
+        results = self.aug(**results)
+
+        # Unpack mask.
+        if 'mask' in results:
+            mask = results['mask']
+            results['mask'] = []
+            for i, s in enumerate(self.scales):
+                w, h = mask.shape
+                resized_mask = cv2.resize(mask, dsize=(int(w / s), int(h / s)), interpolation=cv2.INTER_LINEAR)
+                results['mask'].append((resized_mask > 0.5).astype(np.float32))
+
+        # Unpack keypoints.
+        if 'keypoints' in results:
+            results['keypoints'] = np.asarray(results['keypoints'], dtype=np.float32)
+
+            if self.kp_filter_lost_elements:
+                idx = np.asarray(results['kp_idx_mapper'], dtype=np.long)
+                kps = np.zeros([keypoints_num, 2], dtype=np.float32)
+                if len(idx) > 0:
+                    kps[idx, ...] = results['keypoints']
+                results['keypoints'] = kps
+
+                visibility = np.zeros(keypoints_num, dtype=np.float32)
+                visibility[idx] = results['keypoints_visibility'][idx]
+                results['keypoints_visibility'] = visibility
+
+                # results['kp_idx_mapper'] = np.arange(len(results['keypoints']))
+                # if (not len(results['kp_idx_mapper']) and self.skip_img_without_anno):
+                #     return None
+
+            kpts = results['keypoints'].reshape(-1, keypoints_per_instance, 2)
+            visibility = results['keypoints_visibility'].reshape(-1, keypoints_per_instance, 1)
+            kpts = np.concatenate([kpts, visibility], axis=2)
+
+            results['keypoints'] = [kpts.copy() for s in self.scales]
+            for i, s in enumerate(self.scales):
+                results['keypoints'][i][..., :2] /= s
+
+        # FIXME. Is it used somehow?
+        if 'gt_labels' in results:
+            if isinstance(results['gt_labels'], list):
+                results['gt_labels'] = np.array(results['gt_labels'])
+            results['gt_labels'] = results['gt_labels'].astype(np.int64)
+
+        # Back to the original format.
+        results = self.mapper(results, self.keymap_back)
+
+        # FIXME. Is it used somehow?
         # update final shape
         if self.update_pad_shape:
             results['pad_shape'] = results['img'].shape
