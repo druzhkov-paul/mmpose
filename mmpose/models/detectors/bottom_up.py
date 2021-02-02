@@ -56,6 +56,7 @@ class BottomUp(BasePose):
             tag_threshold=1.0,
             adjust=self.test_cfg['adjust'],
             refine=self.test_cfg['refine'],
+            dist_reweight=self.test_cfg.get('dist_reweight', False),
             delta=0.0
         )
         self.parser = HeatmapParser(self.test_cfg)

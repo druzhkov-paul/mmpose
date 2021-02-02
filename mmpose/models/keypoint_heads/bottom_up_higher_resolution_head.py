@@ -76,7 +76,7 @@ class BottomUpHigherResolutionHead(nn.Module):
             num_deconv_filters)
 
         assert block_type in {'Basic', 'Bottleneck'}
-        block = Basic if block_type == 'Basic' else Bottleneck
+        block = BasicBlock if block_type == 'Basic' else Bottleneck
 
         self.deconv_layers = self._make_deconv_layers(
             in_channels, deconv_layer_output_channels, num_deconv_layers,
