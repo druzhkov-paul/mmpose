@@ -246,6 +246,8 @@ class AssociativeEmbeddingDecoder:
         ans = self.match(**self.top_k(nms_heatmaps, tags))
         ans, ans_tags = map(list, zip(*ans))
 
+        np.abs(heatmaps, out=heatmaps)
+
         # for i, people in enumerate(ans):
         #     mask = np.where((people[..., 2] > 0).sum(axis=-1) >= 3)
         #     ans[i] = people[mask]

@@ -282,10 +282,14 @@ class BottomUp(BasePose):
         tags = torch.cat(tags_list, dim=4)
 
         # perform grouping
+        torch.nn.functional.relu(aggregated_heatmaps, inplace=True)
         maxm = self.kpts_nms_pool(aggregated_heatmaps)
         maxm = torch.eq(maxm, aggregated_heatmaps).float()
-        nms_heatmaps = aggregated_heatmaps * maxm
-        grouped, scores = self.decoder(aggregated_heatmaps.cpu().numpy(), tags.cpu().numpy()[..., 0], nms_heatmaps.cpu().numpy())
+        aggregated_heatmaps *= 2 * maxm - 1
+        heatmaps_np = aggregated_heatmaps.cpu().numpy()
+        tags_np = tags.cpu().numpy()[..., 0]
+        grouped, scores = self.decoder(heatmaps_np, tags_np, heatmaps_np)
+        # grouped, scores = self.decoder(aggregated_heatmaps.cpu().numpy(), tags.cpu().numpy()[..., 0], nms_heatmaps.cpu().numpy())
         grouped = [grouped]
 
         # grouped, scores = self.parser.parse(aggregated_heatmaps, tags,
