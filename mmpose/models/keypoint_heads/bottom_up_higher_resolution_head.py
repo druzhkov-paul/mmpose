@@ -3,7 +3,7 @@ import torch.nn as nn
 from mmcv.cnn import (build_conv_layer, build_upsample_layer, constant_init,
                       normal_init)
 
-from ..backbones.resnet import BasicBlock
+from ..backbones.resnet import BasicBlock, Bottleneck
 from ..builder import HEADS
 
 
@@ -33,10 +33,12 @@ class BottomUpHigherResolutionHead(nn.Module):
                  num_joints,
                  tag_per_joint=True,
                  extra=None,
+                 upsample_type='deconv',
                  num_deconv_layers=1,
                  num_deconv_filters=(32, ),
                  num_deconv_kernels=(4, ),
                  num_basic_blocks=4,
+                 block_type='Basic',
                  cat_output=None,
                  with_ae_loss=None):
         super().__init__()
@@ -72,10 +74,14 @@ class BottomUpHigherResolutionHead(nn.Module):
         self.final_layers = self._make_final_layers(
             in_channels, final_layer_output_channels, extra, num_deconv_layers,
             num_deconv_filters)
+
+        assert block_type in {'Basic', 'Bottleneck'}
+        block = Basic if block_type == 'Basic' else Bottleneck
+
         self.deconv_layers = self._make_deconv_layers(
             in_channels, deconv_layer_output_channels, num_deconv_layers,
             num_deconv_filters, num_deconv_kernels, num_basic_blocks,
-            cat_output)
+            cat_output, upsample_type, block)
 
     @staticmethod
     def _make_final_layers(in_channels, final_layer_output_channels, extra,
@@ -117,7 +123,8 @@ class BottomUpHigherResolutionHead(nn.Module):
 
     def _make_deconv_layers(self, in_channels, deconv_layer_output_channels,
                             num_deconv_layers, num_deconv_filters,
-                            num_deconv_kernels, num_basic_blocks, cat_output):
+                            num_deconv_kernels, num_basic_blocks, cat_output,
+                            upsample_type='deconv', block=BasicBlock):
         """Make deconv layers."""
         deconv_layers = []
         for i in range(num_deconv_layers):
@@ -129,20 +136,33 @@ class BottomUpHigherResolutionHead(nn.Module):
                 self._get_deconv_cfg(num_deconv_kernels[i])
 
             layers = []
-            layers.append(
-                nn.Sequential(
-                    build_upsample_layer(
-                        dict(type='deconv'),
-                        in_channels=in_channels,
-                        out_channels=planes,
-                        kernel_size=deconv_kernel,
-                        stride=2,
-                        padding=padding,
-                        output_padding=output_padding,
-                        bias=False), nn.BatchNorm2d(planes, momentum=0.1),
-                    nn.ReLU(inplace=True)))
+            assert upsample_type in {'deconv', 'bilinear'}
+            if upsample_type == 'deconv':
+                layers.append(
+                    nn.Sequential(
+                        build_upsample_layer(
+                            dict(type='deconv'),
+                            in_channels=in_channels,
+                            out_channels=planes,
+                            kernel_size=deconv_kernel,
+                            stride=2,
+                            padding=padding,
+                            output_padding=output_padding,
+                            bias=False),
+                        nn.BatchNorm2d(planes, momentum=0.1),
+                        nn.ReLU(inplace=True)))
+            else:
+                layers.append(
+                    nn.Sequential(
+                        build_upsample_layer(
+                            dict(type='bilinear'),
+                            scale_factor=2),
+                        nn.Conv2d(in_channels, planes, 1),
+                        nn.BatchNorm2d(planes, momentum=0.1),
+                        nn.ReLU(inplace=True)))
+
             for _ in range(num_basic_blocks):
-                layers.append(nn.Sequential(BasicBlock(planes, planes), ))
+                layers.append(nn.Sequential(block(planes, planes), ))
             deconv_layers.append(nn.Sequential(*layers))
             in_channels = planes
 
