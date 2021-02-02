@@ -203,7 +203,41 @@ class BottomUp(BasePose):
         output = self.backbone(img)
         if self.with_keypoint:
             output = self.keypoint_head(output)
-        return output
+
+        _, heatmaps, tags = get_multi_stage_outputs(
+                output,
+                None,
+                self.test_cfg['num_joints'],
+                self.test_cfg['with_heatmaps'],
+                self.test_cfg['with_ae'],
+                self.test_cfg['tag_per_joint'],
+                None,
+                False,  # self.test_cfg['project2image'],
+                (0, 0),  # base_size,
+                # This does not depend on the data processing.
+                # It depends on the network itself.
+                align_corners=False)
+
+        heatmaps, tags_list = aggregate_results(
+            1,
+            None,
+            [],
+            heatmaps,
+            tags,
+            [1],
+            self.test_cfg['project2image'],
+            False,
+            align_corners=False)
+
+        tags = torch.cat(tags_list, dim=4)
+
+        # perform grouping
+        torch.nn.functional.relu(heatmaps, inplace=True)
+        maxm = self.kpts_nms_pool(heatmaps)
+        maxm = torch.eq(maxm, heatmaps).float()
+        heatmaps *= 2 * maxm - 1
+
+        return heatmaps, tags
 
     def forward_test(self, img, img_metas, return_heatmap=False, **kwargs):
         """Inference the bottom-up model.

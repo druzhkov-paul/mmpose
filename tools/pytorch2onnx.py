@@ -5,6 +5,7 @@ import numpy as np
 import torch
 from mmcv.runner import load_checkpoint
 
+from mmpose.datasets import build_dataloader, build_dataset
 from mmpose.models import build_posenet
 
 try:
@@ -71,7 +72,9 @@ def pytorch2onnx(model,
         export_params=True,
         keep_initializers_as_inputs=True,
         verbose=show,
-        opset_version=opset_version)
+        opset_version=opset_version,
+        input_names=['image'],
+        output_names=['heatmaps', 'embeddings'])
 
     print(f'Successfully exported ONNX model: {output_file}')
     if verify:
@@ -105,7 +108,7 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description='Convert MMPose models to ONNX')
     parser.add_argument('config', help='test config file path')
-    parser.add_argument('checkpoint', help='checkpoint file')
+    parser.add_argument('-ckpt', '--checkpoint', default=None, help='checkpoint file')
     parser.add_argument('--show', action='store_true', help='show onnx graph')
     parser.add_argument('--output-file', type=str, default='tmp.onnx')
     parser.add_argument('--opset-version', type=int, default=11)
@@ -140,7 +143,8 @@ if __name__ == '__main__':
         raise NotImplementedError(
             'Please implement the forward method for exporting.')
 
-    checkpoint = load_checkpoint(model, args.checkpoint, map_location='cpu')
+    if args.checkpoint:
+        checkpoint = load_checkpoint(model, args.checkpoint, map_location='cpu')
 
     # conver model to onnx file
     pytorch2onnx(
