@@ -74,7 +74,14 @@ def pytorch2onnx(model,
         verbose=show,
         opset_version=opset_version,
         input_names=['image'],
-        output_names=['heatmaps', 'embeddings'])
+        output_names=['heatmaps', 'embeddings'],
+        dynamic_axes = {
+            "image": {
+                2: "height",
+                3: "width"
+            }
+        }
+    )
 
     print(f'Successfully exported ONNX model: {output_file}')
     if verify:
