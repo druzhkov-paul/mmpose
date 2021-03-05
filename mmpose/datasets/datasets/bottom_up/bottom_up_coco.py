@@ -91,6 +91,12 @@ class BottomUpCocoDataset(BottomUpBaseDataset):
                 img_id for img_id in self.img_ids
                 if len(self.coco.getAnnIds(imgIds=img_id, iscrowd=None)) > 0
             ]
+
+        image_ar = {}
+        for im in self.coco.dataset['images']:
+            image_ar[im['id']] = im['width'] / im['height']
+        self.img_ids = list(sorted(self.img_ids, key=lambda x: image_ar[x]))
+
         self.num_images = len(self.img_ids)
         self.id2name, self.name2id = self._get_mapping_id_name(self.coco.imgs)
         self.dataset_name = 'coco'
