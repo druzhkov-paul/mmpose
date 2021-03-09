@@ -26,7 +26,6 @@ class ModelONNXRuntime:
         self.device = onnxruntime.get_device()
         self.model = onnx.load(model_file_path)
         # self.model = polish_model(self.model)
-        self.classes = classes
         self.pt_model = None
         if cfg is not None:
             self.pt_model = build_posenet(cfg.model)

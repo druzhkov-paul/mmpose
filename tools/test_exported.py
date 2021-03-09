@@ -82,9 +82,7 @@ def main():
     for data in data_loader:
         img_metas = data['img_metas'].data[0][0]
         im_data = img_metas['aug_data'][0].cpu().numpy()
-        # im_data = data['img'][0].cpu().numpy()
         result = model(im_data)
-        # print(list(result.keys()))
 
         heatmaps = result['heatmaps']
         tags = result['embeddings']

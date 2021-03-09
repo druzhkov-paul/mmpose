@@ -17,6 +17,7 @@ import os.path as osp
 import string
 from collections import OrderedDict
 
+import numpy as np
 from openvino.inference_engine import IECore
 
 from mmpose.models import build_posenet
