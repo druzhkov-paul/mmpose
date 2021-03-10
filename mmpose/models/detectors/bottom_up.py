@@ -61,7 +61,7 @@ class BottomUp(BasePose):
         )
         self.parser = HeatmapParser(self.test_cfg)
 
-        nms_kernel = 5
+        nms_kernel = self.test_cfg['nms_kernel']
         self.kpts_nms_pool = torch.nn.MaxPool2d(nms_kernel, 1, (nms_kernel - 1) // 2)
 
         self.loss = build_loss(loss_pose)
@@ -298,7 +298,8 @@ class BottomUp(BasePose):
                 base_size,
                 # This does not depend on the data processing.
                 # It depends on the network itself.
-                align_corners=False)
+                align_corners=False,
+                flip_offset=self.test_cfg.get('flip_offset', 0))
 
             aggregated_heatmaps, tags_list = aggregate_results(
                 s,

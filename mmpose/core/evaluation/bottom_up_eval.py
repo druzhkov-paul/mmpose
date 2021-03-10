@@ -14,7 +14,8 @@ def get_multi_stage_outputs(outputs,
                             flip_index=None,
                             project2image=True,
                             size_projected=None,
-                            align_corners=False):
+                            align_corners=False,
+                            flip_offset=0):
     """Inference the model to get multi-stage outputs (heatmaps & tags), and
     resize them to base sizes.
 
@@ -90,13 +91,25 @@ def get_multi_stage_outputs(outputs,
             offset_feat = num_joints if with_heatmaps[i] else 0
 
             if with_heatmaps[i]:
-                heatmaps_avg += output[:, :num_joints][:, flip_index, :, :]
+                o = output[:, :num_joints][:, flip_index, :, :]
+                if flip_offset > 0:
+                    heatmaps_avg += torch.nn.functional.pad(o[..., :-flip_offset], (flip_offset, 0))
+                elif flip_offset < 0:
+                    heatmaps_avg += torch.nn.functional.pad(o[..., -flip_offset:], (0, -flip_offset))
+                else:
+                    heatmaps_avg += o
                 num_heatmaps += 1
 
             if with_ae[i]:
                 tags.append(output[:, offset_feat:])
                 if tag_per_joint:
-                    tags[-1] = tags[-1][:, flip_index, :, :]
+                    t = tags[-1][:, flip_index, :, :]
+                    if flip_offset > 0:
+                        tags[-1] = torch.nn.functional.pad(t[..., :-flip_offset], (flip_offset, 0))
+                    elif flip_offset < 0:
+                        tags[-1] = torch.nn.functional.pad(t[..., -flip_offset:], (0, -flip_offset))
+                    else:
+                        tags[-1] = t
 
         heatmaps.append(heatmaps_avg / num_heatmaps)
 
@@ -167,8 +180,7 @@ def aggregate_results(scale,
         for tms in tags:
             tags_list.append(torch.unsqueeze(tms, dim=4))
 
-    heatmaps_avg = (heatmaps[0] +
-                    heatmaps[1]) / 2.0 if flip_test else heatmaps[0]
+    heatmaps_avg = sum(heatmaps) / len(heatmaps)
 
     if aggregated_heatmaps is None:
         aggregated_heatmaps = heatmaps_avg
