@@ -2,7 +2,7 @@ import numpy as np
 import pytest
 import torch
 
-from mmpose.models import (TopDownMSMUHead, TopDownMultiStageHead,
+from mmpose.models import (FcHead, TopDownMSMUHead, TopDownMultiStageHead,
                            TopDownSimpleHead)
 
 
@@ -10,14 +10,29 @@ def test_top_down_simple_head():
     """Test simple head."""
     with pytest.raises(TypeError):
         # extra
-        _ = TopDownSimpleHead(out_channels=3, in_channels=512, extra=[])
+        _ = TopDownSimpleHead(
+            out_channels=3,
+            in_channels=512,
+            extra=[],
+            loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
+
+    with pytest.raises(TypeError):
+        head = TopDownSimpleHead(
+            out_channels=3, in_channels=512, extra={'final_conv_kernel': 1})
 
     # test num deconv layers
     with pytest.raises(ValueError):
         _ = TopDownSimpleHead(
-            out_channels=3, in_channels=512, num_deconv_layers=-1)
+            out_channels=3,
+            in_channels=512,
+            num_deconv_layers=-1,
+            loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
-    _ = TopDownSimpleHead(out_channels=3, in_channels=512, num_deconv_layers=0)
+    _ = TopDownSimpleHead(
+        out_channels=3,
+        in_channels=512,
+        num_deconv_layers=0,
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
     with pytest.raises(ValueError):
         # the number of layers should match
@@ -26,7 +41,8 @@ def test_top_down_simple_head():
             in_channels=512,
             num_deconv_layers=3,
             num_deconv_filters=(256, 256),
-            num_deconv_kernels=(4, 4))
+            num_deconv_kernels=(4, 4),
+            loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
     with pytest.raises(ValueError):
         # the number of kernels should match
@@ -35,7 +51,8 @@ def test_top_down_simple_head():
             in_channels=512,
             num_deconv_layers=3,
             num_deconv_filters=(256, 256, 256),
-            num_deconv_kernels=(4, 4))
+            num_deconv_kernels=(4, 4),
+            loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
     with pytest.raises(ValueError):
         # the deconv kernels should be 4, 3, 2
@@ -44,7 +61,8 @@ def test_top_down_simple_head():
             in_channels=512,
             num_deconv_layers=3,
             num_deconv_filters=(256, 256, 256),
-            num_deconv_kernels=(3, 2, 0))
+            num_deconv_kernels=(3, 2, 0),
+            loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
     with pytest.raises(ValueError):
         # the deconv kernels should be 4, 3, 2
@@ -53,34 +71,61 @@ def test_top_down_simple_head():
             in_channels=512,
             num_deconv_layers=3,
             num_deconv_filters=(256, 256, 256),
-            num_deconv_kernels=(4, 4, -1))
+            num_deconv_kernels=(4, 4, -1),
+            loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
     # test final_conv_kernel
     head = TopDownSimpleHead(
-        out_channels=3, in_channels=512, extra={'final_conv_kernel': 3})
+        out_channels=3,
+        in_channels=512,
+        extra={'final_conv_kernel': 3},
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
     head.init_weights()
     assert head.final_layer.padding == (1, 1)
     head = TopDownSimpleHead(
-        out_channels=3, in_channels=512, extra={'final_conv_kernel': 1})
+        out_channels=3,
+        in_channels=512,
+        extra={'final_conv_kernel': 1},
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
     assert head.final_layer.padding == (0, 0)
     _ = TopDownSimpleHead(
-        out_channels=3, in_channels=512, extra={'final_conv_kernel': 0})
+        out_channels=3,
+        in_channels=512,
+        extra={'final_conv_kernel': 0},
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
-    head = TopDownSimpleHead(out_channels=3, in_channels=512)
+    head = TopDownSimpleHead(
+        out_channels=3,
+        in_channels=512,
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True),
+        extra=dict(
+            final_conv_kernel=1, num_conv_layers=1, num_conv_kernels=(1, )))
+    assert len(head.final_layer) == 4
+
+    head = TopDownSimpleHead(
+        out_channels=3,
+        in_channels=512,
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
     input_shape = (1, 512, 32, 32)
     inputs = _demo_inputs(input_shape)
     out = head(inputs)
     assert out.shape == torch.Size([1, 3, 256, 256])
 
     head = TopDownSimpleHead(
-        out_channels=3, in_channels=512, num_deconv_layers=0)
+        out_channels=3,
+        in_channels=512,
+        num_deconv_layers=0,
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
     input_shape = (1, 512, 32, 32)
     inputs = _demo_inputs(input_shape)
     out = head(inputs)
     assert out.shape == torch.Size([1, 3, 32, 32])
 
     head = TopDownSimpleHead(
-        out_channels=3, in_channels=512, num_deconv_layers=0)
+        out_channels=3,
+        in_channels=512,
+        num_deconv_layers=0,
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
     input_shape = (1, 512, 32, 32)
     inputs = _demo_inputs(input_shape)
     out = head([inputs])
@@ -94,15 +139,25 @@ def test_top_down_multistage_head():
     with pytest.raises(TypeError):
         # the number of layers should match
         _ = TopDownMultiStageHead(
-            out_channels=3, in_channels=512, num_stages=1, extra=[])
+            out_channels=3,
+            in_channels=512,
+            num_stages=1,
+            extra=[],
+            loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
     # test num deconv layers
     with pytest.raises(ValueError):
         _ = TopDownMultiStageHead(
-            out_channels=3, in_channels=512, num_deconv_layers=-1)
+            out_channels=3,
+            in_channels=512,
+            num_deconv_layers=-1,
+            loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
     _ = TopDownMultiStageHead(
-        out_channels=3, in_channels=512, num_deconv_layers=0)
+        out_channels=3,
+        in_channels=512,
+        num_deconv_layers=0,
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
     with pytest.raises(ValueError):
         # the number of layers should match
@@ -112,7 +167,8 @@ def test_top_down_multistage_head():
             num_stages=1,
             num_deconv_layers=3,
             num_deconv_filters=(256, 256),
-            num_deconv_kernels=(4, 4))
+            num_deconv_kernels=(4, 4),
+            loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
     with pytest.raises(ValueError):
         # the number of kernels should match
@@ -122,7 +178,8 @@ def test_top_down_multistage_head():
             num_stages=1,
             num_deconv_layers=3,
             num_deconv_filters=(256, 256, 256),
-            num_deconv_kernels=(4, 4))
+            num_deconv_kernels=(4, 4),
+            loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
     with pytest.raises(ValueError):
         # the deconv kernels should be 4, 3, 2
@@ -132,7 +189,8 @@ def test_top_down_multistage_head():
             num_stages=1,
             num_deconv_layers=3,
             num_deconv_filters=(256, 256, 256),
-            num_deconv_kernels=(3, 2, 0))
+            num_deconv_kernels=(3, 2, 0),
+            loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
     with pytest.raises(ValueError):
         # the deconv kernels should be 4, 3, 2
@@ -141,27 +199,43 @@ def test_top_down_multistage_head():
             in_channels=512,
             num_deconv_layers=3,
             num_deconv_filters=(256, 256, 256),
-            num_deconv_kernels=(4, 4, -1))
+            num_deconv_kernels=(4, 4, -1),
+            loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
     with pytest.raises(AssertionError):
         # inputs should be list
-        head = TopDownMultiStageHead(out_channels=3, in_channels=512)
+        head = TopDownMultiStageHead(
+            out_channels=3,
+            in_channels=512,
+            loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
         input_shape = (1, 512, 32, 32)
         inputs = _demo_inputs(input_shape)
         out = head(inputs)
 
     # test final_conv_kernel
     head = TopDownMultiStageHead(
-        out_channels=3, in_channels=512, extra={'final_conv_kernel': 3})
+        out_channels=3,
+        in_channels=512,
+        extra={'final_conv_kernel': 3},
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
     head.init_weights()
     assert head.multi_final_layers[0].padding == (1, 1)
     head = TopDownMultiStageHead(
-        out_channels=3, in_channels=512, extra={'final_conv_kernel': 1})
+        out_channels=3,
+        in_channels=512,
+        extra={'final_conv_kernel': 1},
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
     assert head.multi_final_layers[0].padding == (0, 0)
     _ = TopDownMultiStageHead(
-        out_channels=3, in_channels=512, extra={'final_conv_kernel': 0})
+        out_channels=3,
+        in_channels=512,
+        extra={'final_conv_kernel': 0},
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
 
-    head = TopDownMultiStageHead(out_channels=3, in_channels=512)
+    head = TopDownMultiStageHead(
+        out_channels=3,
+        in_channels=512,
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
     input_shape = (1, 512, 32, 32)
     inputs = _demo_inputs(input_shape)
     out = head([inputs])
@@ -169,7 +243,10 @@ def test_top_down_multistage_head():
     assert out[0].shape == torch.Size([1, 3, 256, 256])
 
     head = TopDownMultiStageHead(
-        out_channels=3, in_channels=512, num_deconv_layers=0)
+        out_channels=3,
+        in_channels=512,
+        num_deconv_layers=0,
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True))
     input_shape = (1, 512, 32, 32)
     inputs = _demo_inputs(input_shape)
     out = head([inputs])
@@ -183,7 +260,13 @@ def test_top_down_msmu_head():
     with pytest.raises(AssertionError):
         # inputs should be list
         head = TopDownMSMUHead(
-            out_shape=(64, 48), unit_channels=256, num_stages=2, num_units=2)
+            out_shape=(64, 48),
+            unit_channels=256,
+            num_stages=2,
+            num_units=2,
+            loss_keypoint=(
+                [dict(type='JointsMSELoss', use_target_weight=True)] * 2 +
+                [dict(type='JointsOHKMMSELoss', use_target_weight=True)]) * 2)
         input_shape = (1, 256, 32, 32)
         inputs = _demo_inputs(input_shape)
         _ = head(inputs)
@@ -191,7 +274,13 @@ def test_top_down_msmu_head():
     with pytest.raises(AssertionError):
         # inputs should be list[list, ...]
         head = TopDownMSMUHead(
-            out_shape=(64, 48), unit_channels=256, num_stages=2, num_units=2)
+            out_shape=(64, 48),
+            unit_channels=256,
+            num_stages=2,
+            num_units=2,
+            loss_keypoint=(
+                [dict(type='JointsMSELoss', use_target_weight=True)] * 2 +
+                [dict(type='JointsOHKMMSELoss', use_target_weight=True)]) * 2)
         input_shape = (1, 256, 32, 32)
         inputs = _demo_inputs(input_shape)
         inputs = [inputs] * 2
@@ -200,7 +289,13 @@ def test_top_down_msmu_head():
     with pytest.raises(AssertionError):
         # len(inputs) should equal to num_stages
         head = TopDownMSMUHead(
-            out_shape=(64, 48), unit_channels=256, num_stages=2, num_units=2)
+            out_shape=(64, 48),
+            unit_channels=256,
+            num_stages=2,
+            num_units=2,
+            loss_keypoint=(
+                [dict(type='JointsMSELoss', use_target_weight=True)] * 2 +
+                [dict(type='JointsOHKMMSELoss', use_target_weight=True)]) * 2)
         input_shape = (1, 256, 32, 32)
         inputs = _demo_inputs(input_shape)
         inputs = [[inputs] * 2] * 3
@@ -209,7 +304,13 @@ def test_top_down_msmu_head():
     with pytest.raises(AssertionError):
         # len(inputs[0]) should equal to num_units
         head = TopDownMSMUHead(
-            out_shape=(64, 48), unit_channels=256, num_stages=2, num_units=2)
+            out_shape=(64, 48),
+            unit_channels=256,
+            num_stages=2,
+            num_units=2,
+            loss_keypoint=(
+                [dict(type='JointsMSELoss', use_target_weight=True)] * 2 +
+                [dict(type='JointsOHKMMSELoss', use_target_weight=True)]) * 2)
         input_shape = (1, 256, 32, 32)
         inputs = _demo_inputs(input_shape)
         inputs = [[inputs] * 3] * 2
@@ -218,7 +319,13 @@ def test_top_down_msmu_head():
     with pytest.raises(AssertionError):
         # input channels should equal to param unit_channels
         head = TopDownMSMUHead(
-            out_shape=(64, 48), unit_channels=256, num_stages=2, num_units=2)
+            out_shape=(64, 48),
+            unit_channels=256,
+            num_stages=2,
+            num_units=2,
+            loss_keypoint=(
+                [dict(type='JointsMSELoss', use_target_weight=True)] * 2 +
+                [dict(type='JointsOHKMMSELoss', use_target_weight=True)]) * 2)
         input_shape = (1, 128, 32, 32)
         inputs = _demo_inputs(input_shape)
         inputs = [[inputs] * 2] * 2
@@ -229,7 +336,10 @@ def test_top_down_msmu_head():
         unit_channels=256,
         out_channels=17,
         num_stages=2,
-        num_units=2)
+        num_units=2,
+        loss_keypoint=(
+            [dict(type='JointsMSELoss', use_target_weight=True)] * 2 +
+            [dict(type='JointsOHKMMSELoss', use_target_weight=True)]) * 2)
     input_shape = (1, 256, 32, 32)
     inputs = _demo_inputs(input_shape)
     inputs = [[inputs] * 2] * 2
@@ -238,6 +348,30 @@ def test_top_down_msmu_head():
     assert out[0].shape == torch.Size([1, 17, 64, 48])
 
     head.init_weights()
+
+
+def test_fc_head():
+    """Test fc head."""
+    head = FcHead(
+        in_channels=2048,
+        num_joints=17,
+        loss_keypoint=dict(type='SmoothL1Loss', use_target_weight=True))
+
+    head.init_weights()
+
+    input_shape = (1, 2048)
+    inputs = _demo_inputs(input_shape)
+    out = head(inputs)
+    assert out.shape == torch.Size([1, 17, 2])
+
+    loss = head.get_loss(out, out, torch.ones_like(out))
+    assert torch.allclose(loss['reg_loss'], torch.tensor(0.))
+
+    _ = head.inference_model(inputs)
+    _ = head.inference_model(inputs, [])
+
+    acc = head.get_accuracy(out, out, torch.ones_like(out))
+    assert acc['acc_pose'] == 1.
 
 
 def _demo_inputs(input_shape=(1, 3, 64, 64)):

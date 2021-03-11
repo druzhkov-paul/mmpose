@@ -2,7 +2,7 @@ import os.path as osp
 from math import inf
 
 import mmcv
-from mmcv.runner import Hook
+from mmcv.runner import Hook, save_checkpoint
 from torch.utils.data import DataLoader
 
 from mmpose.utils import get_root_logger
@@ -34,7 +34,7 @@ class EvalHook(Hook):
     rule_map = {'greater': lambda x, y: x > y, 'less': lambda x, y: x < y}
     init_value_map = {'greater': -inf, 'less': inf}
     greater_keys = ['acc', 'ap', 'ar', 'pck', 'auc']
-    less_keys = ['loss', 'epe']
+    less_keys = ['loss', 'epe', 'nme']
 
     def __init__(self,
                  dataloader,
@@ -106,6 +106,8 @@ class EvalHook(Hook):
             self.best_json['best_score'] = self.best_score
             self.best_json['best_ckpt'] = current_ckpt_path
             self.best_json['key_indicator'] = self.key_indicator
+            save_checkpoint(runner.model, osp.join(runner.work_dir,
+                                                   'best.pth'))
             mmcv.dump(self.best_json, json_path)
 
     def evaluate(self, runner, results):
@@ -183,4 +185,6 @@ class DistEvalHook(EvalHook):
                 self.best_json['best_score'] = self.best_score
                 self.best_json['best_ckpt'] = current_ckpt_path
                 self.best_json['key_indicator'] = self.key_indicator
+                save_checkpoint(runner.model,
+                                osp.join(runner.work_dir, 'best.pth'))
                 mmcv.dump(self.best_json, json_path)

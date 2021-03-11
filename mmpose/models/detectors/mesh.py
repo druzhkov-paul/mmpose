@@ -1,11 +1,16 @@
 import numpy as np
 import torch
-from smplx import SMPL
 
 from .. import builder
 from ..mesh_heads.discriminator import SMPLDiscriminator
 from ..registry import POSENETS
 from .base import BasePose
+
+try:
+    from smplx import SMPL
+    has_smpl = True
+except (ImportError, ModuleNotFoundError):
+    has_smpl = False
 
 
 def set_requires_grad(nets, requires_grad=False):
@@ -52,6 +57,8 @@ class ParametricMesh(BasePose):
                  test_cfg=None,
                  pretrained=None):
         super().__init__()
+
+        assert has_smpl, 'Please install smplx to use SMPL.'
 
         self.backbone = builder.build_backbone(backbone)
         self.mesh_head = builder.build_head(mesh_head)
@@ -288,7 +295,7 @@ class ParametricMesh(BasePose):
             batch_size: N
             num_img_channel: C (Default: 3)
             img height: imgH
-            img weight: imgW
+            img width: imgW
 
         Args:
             img (torch.Tensor[N x C x imgH x imgW]): Input images.

@@ -39,14 +39,13 @@ model = dict(
         type='TopDownSimpleHead',
         in_channels=1280,
         out_channels=channel_cfg['num_output_channels'],
-    ),
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True)),
     train_cfg=dict(),
     test_cfg=dict(
         flip_test=True,
         post_process='default',
         shift_heatmap=True,
-        modulate_kernel=11),
-    loss_pose=dict(type='JointsMSELoss', use_target_weight=True))
+        modulate_kernel=11))
 
 data_cfg = dict(
     image_size=[256, 256],
@@ -114,7 +113,7 @@ data = dict(
         pipeline=val_pipeline),
     test=dict(
         type='TopDownMpiiDataset',
-        ann_file=f'{data_root}/annotations/mpii_test.json',
+        ann_file=f'{data_root}/annotations/mpii_val.json',
         img_prefix=f'{data_root}/images/',
         data_cfg=data_cfg,
         pipeline=val_pipeline),

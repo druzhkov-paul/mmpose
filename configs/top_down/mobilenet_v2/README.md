@@ -2,9 +2,11 @@
 
 ## Introduction
 
-```
+[BACKBONE]
+
+```bibtex
 @inproceedings{sandler2018mobilenetv2,
-  title="{Mobilenetv2: Inverted residuals and linear bottlenecks}",
+  title={Mobilenetv2: Inverted residuals and linear bottlenecks},
   author={Sandler, Mark and Howard, Andrew and Zhu, Menglong and Zhmoginov, Andrey and Chen, Liang-Chieh},
   booktitle={Proceedings of the IEEE conference on computer vision and pattern recognition},
   pages={4510--4520},
@@ -27,4 +29,4 @@
 
 | Arch  | Input Size | Mean | Mean@0.1   | ckpt    | log     |
 | :--- | :--------: | :------: | :------: |:------: |:------: |
-| [pose_mobilenetv2](/configs/top_down/mobilenet_v2/mpii/mobilenet_v2_mpii_256x256.py) | 256x256 | 0.854 | 0.272 | [ckpt](https://download.openmmlab.com/mmpose/top_down/mobilenetv2/mobilenetv2_mpii_256x256-e068afa7_20200812.pth) | [log](https://download.openmmlab.com/mmpose/top_down/mobilenetv2/mobilenetv2_mpii_256x256_20200812.log.json) |
+| [pose_mobilenetv2](/configs/top_down/mobilenet_v2/mpii/mobilenet_v2_mpii_256x256.py) | 256x256 | 0.854 | 0.235 | [ckpt](https://download.openmmlab.com/mmpose/top_down/mobilenetv2/mobilenetv2_mpii_256x256-e068afa7_20200812.pth) | [log](https://download.openmmlab.com/mmpose/top_down/mobilenetv2/mobilenetv2_mpii_256x256_20200812.log.json) |

@@ -8,7 +8,7 @@ evaluation = dict(interval=10, metric='mAP', key_indicator='AP')
 
 optimizer = dict(
     type='Adam',
-    lr=0.003,
+    lr=5e-4,
 )
 optimizer_config = dict(grad_clip=None)
 # learning policy
@@ -26,7 +26,6 @@ log_config = dict(
         # dict(type='TensorboardLoggerHook')
     ])
 
-# target_type = 'CombinedTarget'
 target_type = 'GaussianHeatMap'
 channel_cfg = dict(
     num_output_channels=17,
@@ -78,16 +77,15 @@ model = dict(
         out_channels=channel_cfg['num_output_channels'],
         num_deconv_layers=0,
         extra=dict(final_conv_kernel=1, ),
-    ),
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True)),
     train_cfg=dict(),
     test_cfg=dict(
         flip_test=True,
         post_process='default',
         shift_heatmap=False,
         target_type=target_type,
-        modulate_kernel=13,
-        use_udp=True),
-    loss_pose=dict(type='JointsMSELoss', use_target_weight=True))
+        modulate_kernel=11,
+        use_udp=True))
 
 data_cfg = dict(
     image_size=[192, 256],
@@ -114,8 +112,7 @@ train_pipeline = [
         num_joints_half_body=8,
         prob_half_body=0.3),
     dict(
-        type='TopDownGetRandomScaleRotation', rot_factor=45,
-        scale_factor=0.35),
+        type='TopDownGetRandomScaleRotation', rot_factor=40, scale_factor=0.5),
     dict(type='TopDownAffine', use_udp=True),
     dict(type='ToTensor'),
     dict(
@@ -123,7 +120,10 @@ train_pipeline = [
         mean=[0.485, 0.456, 0.406],
         std=[0.229, 0.224, 0.225]),
     dict(
-        type='TopDownGenerateTarget', encoding='UDP', target_type=target_type),
+        type='TopDownGenerateTarget',
+        sigma=2,
+        encoding='UDP',
+        target_type=target_type),
     dict(
         type='Collect',
         keys=['img', 'target', 'target_weight'],
@@ -154,7 +154,7 @@ test_pipeline = val_pipeline
 
 data_root = 'data/coco'
 data = dict(
-    samples_per_gpu=48,
+    samples_per_gpu=64,
     workers_per_gpu=2,
     train=dict(
         type='TopDownCocoDataset',

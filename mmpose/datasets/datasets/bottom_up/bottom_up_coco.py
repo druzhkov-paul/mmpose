@@ -68,6 +68,8 @@ class BottomUpCocoDataset(BottomUpBaseDataset):
             ],
             dtype=np.float32).reshape((self.ann_info['num_joints'], 1))
 
+        # 'https://github.com/cocodataset/cocoapi/blob/master/PythonAPI/'
+        # 'pycocotools/cocoeval.py#L523'
         self.sigmas = np.array([
             .26, .25, .25, .35, .35, .79, .79, .72, .72, .62, .62, 1.07, 1.07,
             .87, .87, .89, .89
@@ -222,10 +224,8 @@ class BottomUpCocoDataset(BottomUpBaseDataset):
                 * preds (list[np.ndarray(P, K, 3+tag_num)]):
                   Pose predictions for all people in images.
                 * scores (list[P]):
-                * image_path (list[str]): For example, [ 'c','o','c','o',
-                  '/',i','m','a','g','e','s','/', 'v','a', 'l',
-                  '2', '0', '1', '7', '/', '0', '0', '0', '0', '0',
-                  '0', '3', '9', '7', '1', '3', '3', '.', 'j', 'p', 'g']
+                * image_path (list[str]): For example, ['coco/images/
+                val2017/000000397133.jpg']
                 * heatmap (np.ndarray[N, K, H, W]): model outputs.
 
             res_folder (str): Path of directory to save the results.
@@ -246,10 +246,10 @@ class BottomUpCocoDataset(BottomUpBaseDataset):
         scores = []
         image_paths = []
 
-        for _preds, _scores, _image_path, _ in outputs:
-            preds.append(_preds)
-            scores.append(_scores)
-            image_paths.append(''.join(_image_path))
+        for output in outputs:
+            preds.append(output['preds'])
+            scores.append(output['scores'])
+            image_paths.append(output['image_paths'][0])
 
         kpts = defaultdict(list)
         # iterate over images

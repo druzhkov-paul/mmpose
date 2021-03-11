@@ -8,7 +8,7 @@ evaluation = dict(interval=50, metric='mAP', key_indicator='AP')
 
 optimizer = dict(
     type='Adam',
-    lr=0.001,
+    lr=0.0015,
 )
 optimizer_config = dict(grad_clip=None)
 # learning policy
@@ -88,7 +88,17 @@ model = dict(
         num_deconv_layers=0,
         tag_per_joint=True,
         with_ae_loss=[True],
-        extra=dict(final_conv_kernel=1, )),
+        extra=dict(final_conv_kernel=1, ),
+        loss_keypoint=dict(
+            type='MultiLossFactory',
+            num_joints=17,
+            num_stages=1,
+            ae_loss_type='exp',
+            with_ae_loss=[True],
+            push_loss_factor=[0.001],
+            pull_loss_factor=[0.001],
+            with_heatmaps_loss=[True],
+            heatmaps_loss_factor=[1.0])),
     train_cfg=dict(
         num_joints=channel_cfg['dataset_joints'],
         img_size=data_cfg['image_size']),
@@ -109,19 +119,7 @@ model = dict(
         adjust=True,
         refine=True,
         flip_test=True,
-        use_udp=True),
-    loss_pose=dict(
-        type='MultiLossFactory',
-        num_joints=17,
-        num_stages=1,
-        ae_loss_type='exp',
-        with_ae_loss=[True],
-        push_loss_factor=[0.001],
-        pull_loss_factor=[0.001],
-        with_heatmaps_loss=[True],
-        heatmaps_loss_factor=[1.0],
-    ),
-)
+        use_udp=True))
 
 train_pipeline = [
     dict(type='LoadImageFromFile'),
@@ -177,7 +175,7 @@ test_pipeline = val_pipeline
 data_root = 'data/coco'
 data = dict(
     samples_per_gpu=24,
-    workers_per_gpu=1,
+    workers_per_gpu=2,
     train=dict(
         type='BottomUpCocoDataset',
         ann_file=f'{data_root}/annotations/person_keypoints_train2017.json',

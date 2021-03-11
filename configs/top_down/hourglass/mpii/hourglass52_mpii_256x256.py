@@ -45,14 +45,13 @@ model = dict(
         num_stages=1,
         num_deconv_layers=0,
         extra=dict(final_conv_kernel=1, ),
-    ),
+        loss_keypoint=dict(type='JointsMSELoss', use_target_weight=True)),
     train_cfg=dict(),
     test_cfg=dict(
         flip_test=True,
         post_process='default',
         shift_heatmap=True,
-        modulate_kernel=11),
-    loss_pose=dict(type='JointsMSELoss', use_target_weight=True))
+        modulate_kernel=11))
 
 data_cfg = dict(
     image_size=[256, 256],
@@ -120,7 +119,7 @@ data = dict(
         pipeline=val_pipeline),
     test=dict(
         type='TopDownMpiiDataset',
-        ann_file=f'{data_root}/annotations/mpii_test.json',
+        ann_file=f'{data_root}/annotations/mpii_val.json',
         img_prefix=f'{data_root}/images/',
         data_cfg=data_cfg,
         pipeline=val_pipeline),

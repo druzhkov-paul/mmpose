@@ -8,7 +8,7 @@ evaluation = dict(interval=50, metric='mAP', key_indicator='AP')
 
 optimizer = dict(
     type='Adam',
-    lr=0.001,
+    lr=0.0015,
 )
 optimizer_config = dict(grad_clip=None)
 # learning policy
@@ -92,7 +92,17 @@ model = dict(
         num_deconv_kernels=[4],
         num_basic_blocks=4,
         cat_output=[True],
-        with_ae_loss=[True, False]),
+        with_ae_loss=[True, False],
+        loss_keypoint=dict(
+            type='MultiLossFactory',
+            num_joints=17,
+            num_stages=2,
+            ae_loss_type='exp',
+            with_ae_loss=[True, False],
+            push_loss_factor=[0.001, 0.001],
+            pull_loss_factor=[0.001, 0.001],
+            with_heatmaps_loss=[True, True],
+            heatmaps_loss_factor=[1.0, 1.0])),
     train_cfg=dict(
         num_joints=channel_cfg['dataset_joints'],
         img_size=data_cfg['image_size']),
@@ -113,19 +123,7 @@ model = dict(
         adjust=True,
         refine=True,
         flip_test=True,
-        use_udp=True),
-    loss_pose=dict(
-        type='MultiLossFactory',
-        num_joints=17,
-        num_stages=2,
-        ae_loss_type='exp',
-        with_ae_loss=[True, False],
-        push_loss_factor=[0.001, 0.001],
-        pull_loss_factor=[0.001, 0.001],
-        with_heatmaps_loss=[True, True],
-        heatmaps_loss_factor=[1.0, 1.0],
-    ),
-)
+        use_udp=True))
 
 train_pipeline = [
     dict(type='LoadImageFromFile'),
@@ -169,9 +167,7 @@ val_pipeline = [
         use_udp=True),
     dict(
         type='Collect',
-        keys=[
-            'img',
-        ],
+        keys=['img'],
         meta_keys=[
             'image_file', 'aug_data', 'test_scale_factor', 'base_size',
             'center', 'scale', 'flip_index'
@@ -182,8 +178,8 @@ test_pipeline = val_pipeline
 
 data_root = 'data/coco'
 data = dict(
-    samples_per_gpu=12,
-    workers_per_gpu=1,
+    samples_per_gpu=24,
+    workers_per_gpu=2,
     train=dict(
         type='BottomUpCocoDataset',
         ann_file=f'{data_root}/annotations/person_keypoints_train2017.json',

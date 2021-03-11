@@ -4,6 +4,8 @@
 
 ## Introduction
 
+English | [简体中文](README_CN.md)
+
 [![Documentation](https://readthedocs.org/projects/mmpose/badge/?version=latest)](https://mmpose.readthedocs.io/en/latest/?badge=latest)
 [![actions](https://github.com/open-mmlab/mmpose/workflows/build/badge.svg)](https://github.com/open-mmlab/mmpose/actions)
 [![codecov](https://codecov.io/gh/open-mmlab/mmpose/branch/master/graph/badge.svg)](https://codecov.io/gh/open-mmlab/mmpose)
@@ -32,7 +34,7 @@ The master branch works with **PyTorch 1.3+**.
 
 - **Support diverse tasks**
 
-  We support a wide spectrum of mainstream human pose analysis tasks in current research community, including 2d multi-person human pose estimation, 2d hand pose estimation, 133 keypoint whole-body human pose estimation, and 3d human mesh recovery.
+  We support a wide spectrum of mainstream human pose analysis tasks in current research community, including 2d multi-person human pose estimation, 2d hand pose estimation, 2d face landmark detection, 133 keypoint whole-body human pose estimation, fashion landmark detection and 3d human mesh recovery.
 
 - **Higher efficiency and higher accuracy**
 
@@ -52,55 +54,79 @@ The master branch works with **PyTorch 1.3+**.
 
 ## [Model Zoo](https://mmpose.readthedocs.io/en/latest/modelzoo.html)
 
-Supported backbones for human pose estimation:
+Supported algorithms:
 
-- [x] [AlexNet](configs/top_down/alexnet/README.md)
-- [x] [VGG](configs/top_down/vgg/README.md)
-- [x] [HRNet](configs/top_down/hrnet/README.md)
-- [x] [MobilenetV2](configs/top_down/mobilenet_v2/README.md)
-- [x] [ResNet](configs/top_down/resnet/README.md)
-- [x] [ResNetV1D](configs/top_down/resnetv1d/README.md)
-- [x] [ResNeSt](configs/top_down/resnest/README.md)
-- [x] [ResNext](configs/top_down/resnext/README.md)
-- [x] [SCNet](configs/top_down/scnet/README.md)
-- [x] [SEResNet](configs/top_down/seresnet/README.md)
-- [x] [ShufflenetV1](configs/top_down/shufflenet_v1/README.md)
-- [x] [ShufflenetV2](configs/top_down/shufflenet_v2/README.md)
+<details open>
+<summary>(click to collapse)</summary>
 
-Supported methods for human pose estimation:
+- [x] [DeepPose](configs/top_down/deeppose/README.md) (CVPR'2014)
+- [x] [Wingloss](configs/face/deeppose/README.md) (CVPR'2018)
+- [x] [CPM](configs/top_down/cpm/README.md) (CVPR'2016)
+- [x] [Hourglass](configs/top_down/hourglass/README.md) (ECCV'2016)
+- [x] [SimpleBaseline](configs/top_down/resnet/README.md) (ECCV'2018)
+- [x] [HRNet](configs/top_down/hrnet/README.md) (CVPR'2019)
+- [x] [HRNetv2](configs/face/hrnetv2/README.md) (TPAMI'2019)
+- [x] [SCNet](configs/top_down/scnet/README.md) (CVPR'2020)
+- [x] [Associative Embedding](configs/bottom_up/hrnet/README.md) (NeurIPS'2017)
+- [x] [HigherHRNet](configs/bottom_up/higherhrnet/README.md) (CVPR'2020)
+- [x] [DarkPose](configs/top_down/darkpose/README.md) (CVPR'2020)
+- [x] [UDP](configs/top_down/udp/README.md) (CVPR'2020)
+- [x] [MSPN](configs/top_down/mspn/README.md) (ArXiv'2019)
+- [x] [RSN](configs/top_down/rsn/README.md) (ECCV'2020)
+- [x] [HMR](configs/mesh/hmr/README.md) (CVPR'2018)
 
-- [x] [CPM](configs/top_down/cpm/README.md)
-- [x] [SimpleBaseline](configs/top_down/resnet/README.md)
-- [x] [HRNet](configs/top_down/hrnet/README.md)
-- [x] [Hourglass](configs/top_down/hourglass/README.md)
-- [x] [SCNet](configs/top_down/scnet/README.md)
-- [x] [Associative Embedding](configs/bottom_up/hrnet/README.md)
-- [x] [HigherHRNet](configs/bottom_up/higherhrnet/README.md)
-- [x] [DarkPose](configs/top_down/darkpose/README.md)
-- [x] [UDP](configs/top_down/udp/README.md)
-- [x] [MSPN](configs/top_down/mspn/README.md)
-- [x] [RSN](configs/top_down/rsn/README.md)
+</details>
 
-Supported datasets:
+Supported [datasets](https://mmpose.readthedocs.io/en/latest/datasets.html):
 
-- [x] [COCO](http://cocodataset.org/)
-- [x] [COCO-WholeBody](https://github.com/jin-s13/COCO-WholeBody/)
-- [x] [MPII](http://human-pose.mpi-inf.mpg.de/)
-- [x] [MPII-TRB](https://github.com/kennymckormick/Triplet-Representation-of-human-Body)
-- [x] [AI Challenger](https://github.com/AIChallenger/AI_Challenger_2017)
-- [x] [OCHuman](https://github.com/liruilong940607/OCHumanApi)
-- [x] [CrowdPose](https://github.com/Jeff-sjtu/CrowdPose)
-- [x] [PoseTrack18](https://posetrack.net/users/download.php)
-- [x] [MHP](https://lv-mhp.github.io/dataset)
-- [x] [sub-JHMDB](http://jhmdb.is.tue.mpg.de/dataset)
-- [x] [OneHand10K](https://www.yangangwang.com/papers/WANG-MCC-2018-10.html)
-- [x] [FreiHand](https://lmb.informatik.uni-freiburg.de/projects/freihand/)
-- [x] [CMU Panoptic HandDB](http://domedb.perception.cs.cmu.edu/handdb.html)
-- [x] [InterHand2.6M](https://mks0601.github.io/InterHand2.6M/)
-- [x] [Human3.6M](http://vision.imar.ro/human3.6m/description.php)
+<details open>
+<summary>(click to collapse)</summary>
+
+- [x] [COCO](http://cocodataset.org/) (ECCV'2014)
+- [x] [COCO-WholeBody](https://github.com/jin-s13/COCO-WholeBody/) (ECCV'2020)
+- [x] [MPII](http://human-pose.mpi-inf.mpg.de/) (CVPR'2014)
+- [x] [MPII-TRB](https://github.com/kennymckormick/Triplet-Representation-of-human-Body) (ICCV'2019)
+- [x] [AI Challenger](https://github.com/AIChallenger/AI_Challenger_2017) (ArXiv'2017)
+- [x] [OCHuman](https://github.com/liruilong940607/OCHumanApi) (CVPR'2019)
+- [x] [CrowdPose](https://github.com/Jeff-sjtu/CrowdPose) (CVPR'2019)
+- [x] [PoseTrack18](https://posetrack.net/users/download.php) (CVPR'2018)
+- [x] [MHP](https://lv-mhp.github.io/dataset) (ACM MM'2018)
+- [x] [sub-JHMDB](http://jhmdb.is.tue.mpg.de/dataset) (ICCV'2013)
+- [x] [OneHand10K](https://www.yangangwang.com/papers/WANG-MCC-2018-10.html) (TCSVT'2019)
+- [x] [FreiHand](https://lmb.informatik.uni-freiburg.de/projects/freihand/) (ICCV'2019)
+- [x] [CMU Panoptic HandDB](http://domedb.perception.cs.cmu.edu/handdb.html) (CVPR'2017)
+- [x] [InterHand2.6M](https://mks0601.github.io/InterHand2.6M/) (ECCV'2020)
+- [x] [Human3.6M](http://vision.imar.ro/human3.6m/description.php) (TPAMI'2014)
+- [x] [DeepFashion](http://mmlab.ie.cuhk.edu.hk/projects/DeepFashion/LandmarkDetection.html) (CVPR'2016)
+- [x] [300W](https://ibug.doc.ic.ac.uk/resources/300-W/) (IMAVIS'2016)
+- [x] [WFLW](https://wywu.github.io/projects/LAB/WFLW.html) (CVPR'2018)
+- [x] [AFLW](https://www.tugraz.at/institute/icg/research/team-bischof/lrs/downloads/aflw/) (ICCVW'2011)
+- [x] [COFW](http://www.vision.caltech.edu/xpburgos/ICCV13/) (ICCV'2013)
+
+</details>
+
+Supported backbones:
+
+<details>
+<summary>(click to expand)</summary>
+
+- [x] [AlexNet](configs/top_down/alexnet/README.md) (NeurIPS'2012)
+- [x] [VGG](configs/top_down/vgg/README.md) (ICLR'2015)
+- [x] [HRNet](configs/top_down/hrnet/README.md) (CVPR'2019)
+- [x] [ResNet](configs/top_down/resnet/README.md) (CVPR'2016)
+- [x] [ResNetV1D](configs/top_down/resnetv1d/README.md) (CVPR'2019)
+- [x] [ResNeSt](configs/top_down/resnest/README.md) (ArXiv'2020)
+- [x] [ResNext](configs/top_down/resnext/README.md) (CVPR'2017)
+- [x] [SCNet](configs/top_down/scnet/README.md) (CVPR'2020)
+- [x] [SEResNet](configs/top_down/seresnet/README.md) (CVPR'2018)
+- [x] [ShufflenetV1](configs/top_down/shufflenet_v1/README.md) (CVPR'2018)
+- [x] [ShufflenetV2](configs/top_down/shufflenet_v2/README.md) (ECCV'2018)
+- [x] [MobilenetV2](configs/top_down/mobilenet_v2/README.md) (CVPR'2018)
+
+</details>
 
 Results and models are available in the *README.md* of each method's config directory.
-A summary can be found in the [**model zoo**](https://mmpose.readthedocs.io/en/latest/top_down_models.html) page.
+A summary can be found in the [**model zoo**](https://mmpose.readthedocs.io/en/latest/modelzoo.html) page.
 We will keep up with the latest progress of the community, and support more popular algorithms and frameworks.
 
 If you have any feature requests, please feel free to leave a comment in [Issues](https://github.com/open-mmlab/mmpose/issues/9).
@@ -135,9 +161,15 @@ Please refer to [data_preparation.md](docs/data_preparation.md) for a general kn
 ## Get Started
 
 Please see [getting_started.md](docs/getting_started.md) for the basic usage of MMPose.
-There are also tutorials: [finetune model](tutorials/1_finetune.md),
-[add new dataset](tutorials/2_new_dataset.md), [customize data pipelines](tutorials/3_data_pipeline.md),
-[add new modules](tutorials/4_new_modules.md), [export a model to ONNX](tutorials/5_export_model.md) and [customize runtime settings](tutorials/6_customize_runtime.md).
+There are also tutorials:
+
+- [learn about configs](docs/tutorials/0_config.md)
+- [finetune model](docs/tutorials/1_finetune.md)
+- [add new dataset](docs/tutorials/2_new_dataset.md)
+- [customize data pipelines](docs/tutorials/3_data_pipeline.md)
+- [add new modules](docs/tutorials/4_new_modules.md)
+- [export a model to ONNX](docs/tutorials/5_export_model.md)
+- [customize runtime settings](docs/tutorials/6_customize_runtime.md)
 
 ## FAQ
 
@@ -147,9 +179,22 @@ Please refer to [FAQ](docs/faq.md) for frequently asked questions.
 
 This project is released under the [Apache 2.0 license](LICENSE).
 
+## Citation
+
+If you find this project useful in your research, please consider cite:
+
+```bibtex
+@misc{mmpose2020,
+    title={OpenMMLab Pose Estimation Toolbox and Benchmark},
+    author={MMPose Contributors},
+    howpublished = {\url{https://github.com/open-mmlab/mmpose}},
+    year={2020}
+}
+```
+
 ## Contributing
 
-We appreciate all contributions to improve MMPose. Please refer to [CONTRIBUTING.md](https://github.com/open-mmlab/mmpose/blob/master/.github/CONTRIBUTING.md) for the contributing guideline.
+We appreciate all contributions to improve MMPose. Please refer to [CONTRIBUTING.md](.github/CONTRIBUTING.md) for the contributing guideline.
 
 ## Acknowledgement
 

@@ -8,16 +8,17 @@ Welcome to MMPose's documentation!
    getting_started.md
    demo.md
    benchmark.md
-   config.md
 
 .. toctree::
    :maxdepth: 2
    :caption: Datasets
 
-   data_preparation.md
+   datasets.md
    tasks/2d_body_keypoint.md
    tasks/2d_hand_keypoint.md
+   tasks/2d_face_keypoint.md
    tasks/2d_wholebody_keypoint.md
+   tasks/2d_fashion_landmark.md
    tasks/3d_body_mesh.md
 
 .. toctree::
@@ -27,13 +28,17 @@ Welcome to MMPose's documentation!
    modelzoo.md
    top_down_models.md
    bottom_up_models.md
+   wholebody_models.md
    hand_models.md
+   face_models.md
+   fashion_models.md
    mesh_models.md
 
 .. toctree::
    :maxdepth: 2
    :caption: Tutorials
 
+   tutorials/0_config.md
    tutorials/1_finetune.md
    tutorials/2_new_dataset.md
    tutorials/3_data_pipeline.md

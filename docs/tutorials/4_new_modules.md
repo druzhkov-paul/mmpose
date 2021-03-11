@@ -191,8 +191,8 @@ class MyLoss(nn.Module):
             heatmap_gt = heatmaps_gt[idx].squeeze(1)
             if self.use_target_weight:
                 loss += self.criterion(
-                    heatmap_pred.mul(target_weight[:, idx]),
-                    heatmap_gt.mul(target_weight[:, idx]))
+                    heatmap_pred * target_weight[:, idx],
+                    heatmap_gt * target_weight[:, idx])
             else:
                 loss += self.criterion(heatmap_pred, heatmap_gt)
 
@@ -206,8 +206,8 @@ from .my_loss import MyLoss, my_loss
 
 ```
 
-To use it, modify the `loss_pose` field in the model.
+To use it, modify the `loss_keypoint` field in the model.
 
 ```python
-loss_pose=dict(type='MyLoss', use_target_weight=False)
+loss_keypoint=dict(type='MyLoss', use_target_weight=False)
 ```

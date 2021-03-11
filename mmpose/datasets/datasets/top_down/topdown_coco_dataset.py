@@ -90,6 +90,8 @@ class TopDownCocoDataset(TopDownBaseDataset):
             ],
             dtype=np.float32).reshape((self.ann_info['num_joints'], 1))
 
+        # 'https://github.com/cocodataset/cocoapi/blob/master/PythonAPI/'
+        # 'pycocotools/cocoeval.py#L523'
         self.sigmas = np.array([
             .26, .25, .25, .35, .35, .79, .79, .72, .72, .62, .62, 1.07, 1.07,
             .87, .87, .89, .89
@@ -249,7 +251,7 @@ class TopDownCocoDataset(TopDownBaseDataset):
 
         # pixel std is 200.0
         scale = np.array([w / 200.0, h / 200.0], dtype=np.float32)
-
+        # padding to include proper amount of context
         scale = scale * 1.25
 
         return center, scale
@@ -311,12 +313,12 @@ class TopDownCocoDataset(TopDownBaseDataset):
             heatmap width: W
 
         Args:
-            outputs (list(preds, boxes, image_path, heatmap))
-                :preds (np.ndarray[1,K,3]): The first two dimensions are
+            outputs (list(dict))
+                :preds (np.ndarray[N,K,3]): The first two dimensions are
                     coordinates, score is the third dimension of the array.
-                :boxes (np.ndarray[1,6]): [center[0], center[1], scale[0]
+                :boxes (np.ndarray[N,6]): [center[0], center[1], scale[0]
                     , scale[1],area, score]
-                :image_path (list[str]): For example, ['data/coco/val2017
+                :image_paths (list[str]): For example, ['data/coco/val2017
                     /000000393226.jpg']
                 :heatmap (np.ndarray[N, K, H, W]): model output heatmap
                 :bbox_id (list(int)).
@@ -335,7 +337,13 @@ class TopDownCocoDataset(TopDownBaseDataset):
         res_file = os.path.join(res_folder, 'result_keypoints.json')
 
         kpts = defaultdict(list)
-        for preds, boxes, image_paths, _, bbox_ids in outputs:
+
+        for output in outputs:
+            preds = output['preds']
+            boxes = output['boxes']
+            image_paths = output['image_paths']
+            bbox_ids = output['bbox_ids']
+
             batch_size = len(image_paths)
             for i in range(batch_size):
                 image_id = self.name2id[image_paths[i][len(self.img_prefix):]]

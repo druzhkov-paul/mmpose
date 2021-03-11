@@ -91,6 +91,7 @@ class TopDownPoseTrack18Dataset(TopDownCocoDataset):
             ],
             dtype=np.float32).reshape((self.ann_info['num_joints'], 1))
 
+        # Adapted from COCO dataset
         self.sigmas = np.array([
             .26, .25, .25, .35, .35, .79, .79, .72, .72, .62, .62, 1.07, 1.07,
             .87, .87, .89, .89
@@ -127,9 +128,9 @@ class TopDownPoseTrack18Dataset(TopDownCocoDataset):
 
         Args:
             outputs (list(preds, boxes, image_paths))
-                :preds (np.ndarray[1,K,3]): The first two dimensions are
+                :preds (np.ndarray[N,K,3]): The first two dimensions are
                     coordinates, score is the third dimension of the array.
-                :boxes (np.ndarray[1,6]): [center[0], center[1], scale[0]
+                :boxes (np.ndarray[N,6]): [center[0], center[1], scale[0]
                     , scale[1],area, score]
                 :image_paths (list[str]): For example, ['val/010016_mpii_test
                     /000024.jpg']
@@ -155,7 +156,12 @@ class TopDownPoseTrack18Dataset(TopDownCocoDataset):
 
         kpts = defaultdict(list)
 
-        for preds, boxes, image_paths, _, bbox_ids in outputs:
+        for output in outputs:
+            preds = output['preds']
+            boxes = output['boxes']
+            image_paths = output['image_paths']
+            bbox_ids = output['bbox_ids']
+
             batch_size = len(image_paths)
             for i in range(batch_size):
                 image_id = self.name2id[image_paths[i][len(self.img_prefix):]]

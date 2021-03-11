@@ -1,15 +1,12 @@
 import math
+import warnings
 
 import cv2
 import mmcv
 import numpy as np
-import torch.nn as nn
 from mmcv.image import imwrite
 from mmcv.visualization.image import imshow
 
-from mmpose.core.evaluation import pose_pck_accuracy
-from mmpose.core.evaluation.top_down_eval import keypoints_from_heatmaps
-from mmpose.core.post_processing import flip_back
 from .. import builder
 from ..registry import POSENETS
 from .base import BasePose
@@ -25,11 +22,13 @@ class TopDown(BasePose):
         train_cfg (dict): Config for training. Default: None.
         test_cfg (dict): Config for testing. Default: None.
         pretrained (str): Path to the pretrained models.
-        loss_pose (dict): Config for loss. Default: None.
+        loss_pose (None): Deprecated arguments. Please use
+            `loss_keypoint` for heads instead.
     """
 
     def __init__(self,
                  backbone,
+                 neck=None,
                  keypoint_head=None,
                  train_cfg=None,
                  test_cfg=None,
@@ -39,13 +38,32 @@ class TopDown(BasePose):
 
         self.backbone = builder.build_backbone(backbone)
 
-        if keypoint_head is not None:
-            self.keypoint_head = builder.build_head(keypoint_head)
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
-        self.loss = builder.build_loss(loss_pose)
+
+        if neck is not None:
+            self.neck = builder.build_neck(neck)
+
+        if keypoint_head is not None:
+            keypoint_head['train_cfg'] = train_cfg
+            keypoint_head['test_cfg'] = test_cfg
+
+            if 'loss_keypoint' not in keypoint_head and loss_pose is not None:
+                warnings.warn(
+                    '`loss_pose` for TopDown is deprecated, '
+                    'use `loss_keypoint` for heads instead. See '
+                    'https://github.com/open-mmlab/mmpose/pull/382'
+                    ' for more information.', DeprecationWarning)
+                keypoint_head['loss_keypoint'] = loss_pose
+
+            self.keypoint_head = builder.build_head(keypoint_head)
+
         self.init_weights(pretrained=pretrained)
-        self.target_type = test_cfg.get('target_type', 'GaussianHeatMap')
+
+    @property
+    def with_neck(self):
+        """Check if has keypoint_head."""
+        return hasattr(self, 'neck')
 
     @property
     def with_keypoint(self):
@@ -55,6 +73,8 @@ class TopDown(BasePose):
     def init_weights(self, pretrained=None):
         """Weight initialization for model."""
         self.backbone.init_weights(pretrained)
+        if self.with_neck:
+            self.neck.init_weights()
         if self.with_keypoint:
             self.keypoint_head.init_weights()
 
@@ -78,7 +98,7 @@ class TopDown(BasePose):
             num_keypoints: K
             num_img_channel: C (Default: 3)
             img height: imgH
-            img weight: imgW
+            img width: imgW
             heatmaps height: H
             heatmaps weight: W
 
@@ -112,81 +132,61 @@ class TopDown(BasePose):
     def forward_train(self, img, target, target_weight, img_metas, **kwargs):
         """Defines the computation performed at every call when training."""
         output = self.backbone(img)
+        if self.with_neck:
+            output = self.neck(output)
         if self.with_keypoint:
             output = self.keypoint_head(output)
 
         # if return loss
         losses = dict()
-        if isinstance(output, list):
-            if target.dim() == 5 and target_weight.dim() == 4:
-                # target: [batch_size, num_outputs, num_joints, h, w]
-                # target_weight: [batch_size, num_outputs, num_joints, 1]
-                assert target.size(1) == len(output)
-            if isinstance(self.loss, nn.Sequential):
-                assert len(self.loss) == len(output)
-            if 'loss_weights' in self.train_cfg and self.train_cfg[
-                    'loss_weights'] is not None:
-                assert len(self.train_cfg['loss_weights']) == len(output)
-            for i in range(len(output)):
-                if target.dim() == 5 and target_weight.dim() == 4:
-                    target_i = target[:, i, :, :, :]
-                    target_weight_i = target_weight[:, i, :, :]
-                else:
-                    target_i = target
-                    target_weight_i = target_weight
-                if isinstance(self.loss, nn.Sequential):
-                    loss_func = self.loss[i]
-                else:
-                    loss_func = self.loss
-
-                loss_i = loss_func(output[i], target_i, target_weight_i)
-                if 'loss_weights' in self.train_cfg and self.train_cfg[
-                        'loss_weights']:
-                    loss_i = loss_i * self.train_cfg['loss_weights'][i]
-                if 'mse_loss' not in losses:
-                    losses['mse_loss'] = loss_i
-                else:
-                    losses['mse_loss'] += loss_i
-        else:
-            assert not isinstance(self.loss, nn.Sequential)
-            assert target.dim() == 4 and target_weight.dim() == 3
-            # target: [batch_size, num_joints, h, w]
-            # target_weight: [batch_size, num_joints, 1]
-            losses['mse_loss'] = self.loss(output, target, target_weight)
-
-        if self.target_type == 'GaussianHeatMap':
-            if isinstance(output, list):
-                if target.dim() == 5 and target_weight.dim() == 4:
-                    _, avg_acc, _ = pose_pck_accuracy(
-                        output[-1].detach().cpu().numpy(),
-                        target[:, -1, ...].detach().cpu().numpy(),
-                        target_weight[:, -1,
-                                      ...].detach().cpu().numpy().squeeze(-1) >
-                        0)
-                    # Only use the last output for prediction
-                else:
-                    _, avg_acc, _ = pose_pck_accuracy(
-                        output[-1].detach().cpu().numpy(),
-                        target.detach().cpu().numpy(),
-                        target_weight.detach().cpu().numpy().squeeze(-1) > 0)
-            else:
-                _, avg_acc, _ = pose_pck_accuracy(
-                    output.detach().cpu().numpy(),
-                    target.detach().cpu().numpy(),
-                    target_weight.detach().cpu().numpy().squeeze(-1) > 0)
-            losses['acc_pose'] = float(avg_acc)
+        if self.with_keypoint:
+            keypoint_losses = self.keypoint_head.get_loss(
+                output, target, target_weight)
+            losses.update(keypoint_losses)
+            keypoint_accuracy = self.keypoint_head.get_accuracy(
+                output, target, target_weight)
+            losses.update(keypoint_accuracy)
 
         return losses
 
     def forward_test(self, img, img_metas, return_heatmap=False, **kwargs):
         """Defines the computation performed at every call when testing."""
         assert img.size(0) == len(img_metas)
+        batch_size, _, img_height, img_width = img.shape
+        if batch_size > 1:
+            assert 'bbox_id' in img_metas[0]
 
-        # compute backbone features
-        output = self.backbone(img)
+        result = {}
 
-        return self.process_head(
-            output, img, img_metas, return_heatmap=return_heatmap)
+        features = self.backbone(img)
+        if self.with_neck:
+            features = self.neck(features)
+        if self.with_keypoint:
+            output_heatmap = self.keypoint_head.inference_model(
+                features, flip_pairs=None)
+
+        if self.test_cfg.get('flip_test', True):
+            img_flipped = img.flip(3)
+            features_flipped = self.backbone(img_flipped)
+            if self.with_neck:
+                features_flipped = self.neck(features_flipped)
+            if self.with_keypoint:
+                output_flipped_heatmap = self.keypoint_head.inference_model(
+                    features_flipped, img_metas[0]['flip_pairs'])
+                output_heatmap = (output_heatmap +
+                                  output_flipped_heatmap) * 0.5
+
+        if self.with_keypoint:
+            keypoint_result = self.keypoint_head.decode(
+                img_metas, output_heatmap, img_size=[img_width, img_height])
+            result.update(keypoint_result)
+
+            if not return_heatmap:
+                output_heatmap = None
+
+            result['output_heatmap'] = output_heatmap
+
+        return result
 
     def forward_dummy(self, img):
         """Used for computing network FLOPs.
@@ -200,87 +200,11 @@ class TopDown(BasePose):
             Tensor: Output heatmaps.
         """
         output = self.backbone(img)
+        if self.with_neck:
+            output = self.neck(output)
         if self.with_keypoint:
             output = self.keypoint_head(output)
         return output
-
-    def process_head(self, output, img, img_metas, return_heatmap=False):
-        """Process heatmap and keypoints from backbone features."""
-        flip_pairs = img_metas[0]['flip_pairs']
-        batch_size = img.size(0)
-        if batch_size > 1:
-            assert 'bbox_id' in img_metas[0]
-
-        if self.with_keypoint:
-            output = self.keypoint_head(output)
-
-        if isinstance(output, list):
-            output = output[-1]
-
-        output_heatmap = output.detach().cpu().numpy()
-        if self.test_cfg['flip_test']:
-            img_flipped = img.flip(3)
-
-            output_flipped = self.backbone(img_flipped)
-            if self.with_keypoint:
-                output_flipped = self.keypoint_head(output_flipped)
-            if isinstance(output_flipped, list):
-                output_flipped = output_flipped[-1]
-            output_flipped = flip_back(
-                output_flipped.detach().cpu().numpy(),
-                flip_pairs,
-                target_type=self.target_type)
-
-            # feature is not aligned, shift flipped heatmap for higher accuracy
-            if self.test_cfg['shift_heatmap']:
-                output_flipped[:, :, :, 1:] = output_flipped[:, :, :, :-1]
-            output_heatmap = (output_heatmap + output_flipped) * 0.5
-
-        c = np.zeros((batch_size, 2))
-        s = np.zeros((batch_size, 2))
-        image_path = []
-        score = np.ones(batch_size)
-        bbox_ids = None
-        if 'bbox_id' in img_metas[0]:
-            bbox_ids = []
-        for i in range(batch_size):
-            c[i, :] = img_metas[i]['center']
-            s[i, :] = img_metas[i]['scale']
-            image_path.append(img_metas[i]['image_file'])
-
-            if 'bbox_score' in img_metas[i]:
-                score[i] = np.array(img_metas[i]['bbox_score']).reshape(-1)
-            if bbox_ids is not None:
-                bbox_ids.append(img_metas[i]['bbox_id'])
-
-        preds, maxvals = keypoints_from_heatmaps(
-            output_heatmap,
-            c,
-            s,
-            post_process=self.test_cfg['post_process'],
-            unbiased=self.test_cfg.get('unbiased_decoding', False),
-            kernel=self.test_cfg['modulate_kernel'],
-            use_udp=self.test_cfg.get('use_udp', False),
-            valid_radius_factor=self.test_cfg.get('valid_radius_factor',
-                                                  0.0546875),
-            target_type=self.test_cfg.get('target_type', 'GaussianHeatMap'))
-
-        all_preds = np.zeros((batch_size, output.shape[1], 3),
-                             dtype=np.float32)
-        all_boxes = np.zeros((batch_size, 6), dtype=np.float32)
-
-        all_preds[:, :, 0:2] = preds[:, :, 0:2]
-        all_preds[:, :, 2:3] = maxvals
-        all_boxes[:, 0:2] = c[:, 0:2]
-        all_boxes[:, 2:4] = s[:, 0:2]
-        all_boxes[:, 4] = np.prod(s * 200.0, axis=1)
-        all_boxes[:, 5] = score
-        if not return_heatmap:
-            output_heatmap = None
-        if bbox_ids is not None:
-            return all_preds, all_boxes, image_path, output_heatmap, bbox_ids
-        else:
-            return all_preds, all_boxes, image_path, output_heatmap
 
     def show_result(self,
                     img,
@@ -296,6 +220,7 @@ class TopDown(BasePose):
                     font_scale=0.5,
                     win_name='',
                     show=False,
+                    show_keypoint_weight=False,
                     wait_time=0,
                     out_file=None):
         """Draw `result` over `img`.
@@ -356,18 +281,26 @@ class TopDown(BasePose):
                         x_coord, y_coord, kpt_score = int(kpt[0]), int(
                             kpt[1]), kpt[2]
                         if kpt_score > kpt_score_thr:
-                            img_copy = img.copy()
-                            r, g, b = pose_kpt_color[kid]
-                            cv2.circle(img_copy, (int(x_coord), int(y_coord)),
-                                       radius, (int(r), int(g), int(b)), -1)
-                            transparency = max(0, min(1, kpt_score))
-                            cv2.addWeighted(
-                                img_copy,
-                                transparency,
-                                img,
-                                1 - transparency,
-                                0,
-                                dst=img)
+                            if show_keypoint_weight:
+                                img_copy = img.copy()
+                                r, g, b = pose_kpt_color[kid]
+                                cv2.circle(img_copy,
+                                           (int(x_coord), int(y_coord)),
+                                           radius, (int(r), int(g), int(b)),
+                                           -1)
+                                transparency = max(0, min(1, kpt_score))
+                                cv2.addWeighted(
+                                    img_copy,
+                                    transparency,
+                                    img,
+                                    1 - transparency,
+                                    0,
+                                    dst=img)
+                            else:
+                                r, g, b = pose_kpt_color[kid]
+                                cv2.circle(img, (int(x_coord), int(y_coord)),
+                                           radius, (int(r), int(g), int(b)),
+                                           -1)
 
                 # draw limbs
                 if skeleton is not None and pose_limb_color is not None:
@@ -383,35 +316,42 @@ class TopDown(BasePose):
                                 and pos2[1] < img_h
                                 and kpts[sk[0] - 1, 2] > kpt_score_thr
                                 and kpts[sk[1] - 1, 2] > kpt_score_thr):
-                            img_copy = img.copy()
-                            X = (pos1[0], pos2[0])
-                            Y = (pos1[1], pos2[1])
-                            mX = np.mean(X)
-                            mY = np.mean(Y)
-                            length = ((Y[0] - Y[1])**2 + (X[0] - X[1])**2)**0.5
-                            angle = math.degrees(
-                                math.atan2(Y[0] - Y[1], X[0] - X[1]))
-                            stickwidth = 2
-                            polygon = cv2.ellipse2Poly(
-                                (int(mX), int(mY)),
-                                (int(length / 2), int(stickwidth)), int(angle),
-                                0, 360, 1)
-
                             r, g, b = pose_limb_color[sk_id]
-                            cv2.fillConvexPoly(img_copy, polygon,
-                                               (int(r), int(g), int(b)))
-                            transparency = max(
-                                0,
-                                min(
-                                    1, 0.5 *
-                                    (kpts[sk[0] - 1, 2] + kpts[sk[1] - 1, 2])))
-                            cv2.addWeighted(
-                                img_copy,
-                                transparency,
-                                img,
-                                1 - transparency,
-                                0,
-                                dst=img)
+                            if show_keypoint_weight:
+                                img_copy = img.copy()
+                                X = (pos1[0], pos2[0])
+                                Y = (pos1[1], pos2[1])
+                                mX = np.mean(X)
+                                mY = np.mean(Y)
+                                length = ((Y[0] - Y[1])**2 +
+                                          (X[0] - X[1])**2)**0.5
+                                angle = math.degrees(
+                                    math.atan2(Y[0] - Y[1], X[0] - X[1]))
+                                stickwidth = 2
+                                polygon = cv2.ellipse2Poly(
+                                    (int(mX), int(mY)),
+                                    (int(length / 2), int(stickwidth)),
+                                    int(angle), 0, 360, 1)
+                                cv2.fillConvexPoly(img_copy, polygon,
+                                                   (int(r), int(g), int(b)))
+                                transparency = max(
+                                    0,
+                                    min(
+                                        1, 0.5 * (kpts[sk[0] - 1, 2] +
+                                                  kpts[sk[1] - 1, 2])))
+                                cv2.addWeighted(
+                                    img_copy,
+                                    transparency,
+                                    img,
+                                    1 - transparency,
+                                    0,
+                                    dst=img)
+                            else:
+                                cv2.line(
+                                    img,
+                                    pos1,
+                                    pos2, (int(r), int(g), int(b)),
+                                    thickness=thickness)
 
         if show:
             imshow(img, win_name, wait_time)

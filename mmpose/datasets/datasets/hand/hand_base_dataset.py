@@ -107,7 +107,7 @@ class HandBaseDataset(Dataset, metaclass=ABCMeta):
 
         # pixel std is 200.0
         scale = np.array([w / 200.0, h / 200.0], dtype=np.float32)
-
+        # padding to include proper amount of context
         scale = scale * padding
 
         return center, scale
@@ -146,7 +146,7 @@ class HandBaseDataset(Dataset, metaclass=ABCMeta):
             auc_nor (float): AUC normalization factor, default as 30 pixel.
 
         Returns:
-            dict: Evaluation results for evaluation metric.
+            List: Evaluation results for evaluation metric.
         """
         info_str = []
 
@@ -207,3 +207,13 @@ class HandBaseDataset(Dataset, metaclass=ABCMeta):
         results = copy.deepcopy(self.db[idx])
         results['ann_info'] = self.ann_info
         return self.pipeline(results)
+
+    def _sort_and_unique_bboxes(self, kpts, key='bbox_id'):
+        """sort kpts and remove the repeated ones."""
+        kpts = sorted(kpts, key=lambda x: x[key])
+        num = len(kpts)
+        for i in range(num - 1, 0, -1):
+            if kpts[i][key] == kpts[i - 1][key]:
+                del kpts[i]
+
+        return kpts
