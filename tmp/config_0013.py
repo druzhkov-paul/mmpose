@@ -92,6 +92,7 @@ model = dict(
         refine=True,
         dist_reweight=True,
         flip_test=False,
+        flip_offset=1,
         use_udp=False),
     loss_pose=dict(
         type='MultiLossFactory',
