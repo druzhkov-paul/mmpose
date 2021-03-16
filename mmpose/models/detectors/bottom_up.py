@@ -8,10 +8,7 @@ import torch
 from mmcv.image import imwrite
 from mmcv.visualization.image import imshow
 
-from mmpose.core.evaluation import (aggregate_results, get_group_preds,
-                                    get_multi_stage_outputs)
-from mmpose.core.post_processing.group import HeatmapParser
-from mmpose.core.post_processing.decoder_ae import AssociativeEmbeddingDecoder
+from mmpose.core.evaluation import get_group_preds
 from .. import builder
 from ..registry import POSENETS
 from .base import BasePose
@@ -52,26 +49,12 @@ class BottomUp(BasePose):
                     ' for more information.', DeprecationWarning)
                 keypoint_head['loss_keypoint'] = loss_pose
 
+            keypoint_head['test_cfg'] = test_cfg
             self.keypoint_head = builder.build_head(keypoint_head)
 
         self.train_cfg = train_cfg
         self.test_cfg = test_cfg
         self.use_udp = test_cfg.get('use_udp', False)
-        self.decoder = AssociativeEmbeddingDecoder(
-            num_joints=self.test_cfg['num_joints'],
-            max_num_people=30,
-            detection_threshold=0.1,
-            use_detection_val=True,
-            ignore_too_much=False,
-            tag_threshold=1.0,
-            adjust=self.test_cfg['adjust'],
-            refine=self.test_cfg['refine'],
-            dist_reweight=self.test_cfg.get('dist_reweight', False),
-            delta=self.test_cfg.get('delta', 0.0)
-        )
-        self.parser = HeatmapParser(self.test_cfg)
-        nms_kernel = self.test_cfg['nms_kernel']
-        self.kpts_nms_pool = torch.nn.MaxPool2d(nms_kernel, 1, (nms_kernel - 1) // 2)
 
         self.init_weights(pretrained=pretrained)
 
@@ -202,6 +185,10 @@ class BottomUp(BasePose):
         if self.with_keypoint:
             output = self.keypoint_head(output)
 
+        aggregated_outputs = self.keypoint_head.aggregate_augm_results([output], [], [1], (0, 0), None, self.use_udp)
+        # _, _, heatmaps, tags = self.keypoint_head.get_poses([output], [], [1], (0, 0), None, self.use_udp)
+        return aggregated_outputs
+
         _, heatmaps, tags = get_multi_stage_outputs(
                 output,
                 None,
@@ -237,6 +224,118 @@ class BottomUp(BasePose):
 
         return heatmaps, tags
 
+
+    # def forward_test(self, img, img_metas, return_heatmap=False, **kwargs):
+    #     """Inference the bottom-up model.
+
+    #     Note:
+    #         Batchsize = N (currently support batchsize = 1)
+    #         num_img_channel: C
+    #         img_width: imgW
+    #         img_height: imgH
+
+    #     Args:
+    #         flip_index (List(int)):
+    #         aug_data (List(Tensor[NxCximgHximgW])): Multi-scale image
+    #         test_scale_factor (List(float)): Multi-scale factor
+    #         base_size (Tuple(int)): Base size of image when scale is 1
+    #         center (np.ndarray): center of image
+    #         scale (np.ndarray): the scale of image
+    #     """
+    #     assert img.size(0) == 1
+    #     assert len(img_metas) == 1
+
+    #     img_metas = img_metas[0]
+
+    #     aug_data = img_metas['aug_data']
+
+    #     test_scale_factor = img_metas['test_scale_factor']
+    #     base_size = img_metas['base_size']
+    #     center = img_metas['center']
+    #     scale = img_metas['scale']
+
+    #     result = {}
+
+    #     aggregated_heatmaps = None
+    #     tags_list = []
+    #     for idx, s in enumerate(sorted(test_scale_factor, reverse=True)):
+    #         image_resized = aug_data[idx].to(img.device)
+
+    #         features = self.backbone(image_resized)
+    #         if self.with_keypoint:
+    #             outputs = self.keypoint_head(features)
+
+    #         if self.test_cfg.get('flip_test', True):
+    #             # use flip test
+    #             features_flipped = self.backbone(
+    #                 torch.flip(image_resized, [3]))
+    #             if self.with_keypoint:
+    #                 outputs_flipped = self.keypoint_head(features_flipped)
+    #         else:
+    #             outputs_flipped = None
+
+    #         _, heatmaps, tags = get_multi_stage_outputs(
+    #             outputs,
+    #             outputs_flipped,
+    #             self.test_cfg['num_joints'],
+    #             self.test_cfg['with_heatmaps'],
+    #             self.test_cfg['with_ae'],
+    #             self.test_cfg['tag_per_joint'],
+    #             img_metas['flip_index'],
+    #             self.test_cfg['project2image'],
+    #             base_size,
+    #             align_corners=self.use_udp,
+    #             flip_offset=self.test_cfg.get('flip_offset', 0))
+
+    #         aggregated_heatmaps, tags_list = aggregate_results(
+    #             s,
+    #             aggregated_heatmaps,
+    #             tags_list,
+    #             heatmaps,
+    #             tags,
+    #             test_scale_factor,
+    #             self.test_cfg['project2image'],
+    #             self.test_cfg.get('flip_test', True),
+    #             align_corners=self.use_udp)
+
+    #     # average heatmaps of different scales
+    #     aggregated_heatmaps = aggregated_heatmaps / float(
+    #         len(test_scale_factor))
+    #     tags = torch.cat(tags_list, dim=4)
+
+    #     # perform grouping
+    #     torch.nn.functional.relu(aggregated_heatmaps, inplace=True)
+    #     maxm = self.kpts_nms_pool(aggregated_heatmaps)
+    #     maxm = torch.eq(maxm, aggregated_heatmaps).float()
+    #     aggregated_heatmaps *= 2 * maxm - 1
+    #     heatmaps_np = aggregated_heatmaps.cpu().numpy()
+    #     tags_np = tags.cpu().numpy()[..., 0]
+    #     grouped, scores = self.decoder(heatmaps_np, tags_np, heatmaps_np)
+    #     # grouped, scores = self.decoder(aggregated_heatmaps.cpu().numpy(), tags.cpu().numpy()[..., 0], nms_heatmaps.cpu().numpy())
+    #     grouped = [grouped]
+
+    #     preds = get_group_preds(
+    #         grouped,
+    #         center,
+    #         scale, [aggregated_heatmaps.size(3),
+    #                 aggregated_heatmaps.size(2)],
+    #         use_udp=self.use_udp)
+
+    #     image_paths = []
+    #     image_paths.append(img_metas['image_file'])
+
+    #     if return_heatmap:
+    #         output_heatmap = aggregated_heatmaps.detach().cpu().numpy()
+    #     else:
+    #         output_heatmap = None
+
+    #     result['preds'] = preds
+    #     result['scores'] = scores
+    #     result['image_paths'] = image_paths
+    #     result['output_heatmap'] = output_heatmap
+
+    #     return result
+
     def forward_test(self, img, img_metas, return_heatmap=False, **kwargs):
         """Inference the bottom-up model.
 
@@ -268,75 +367,34 @@ class BottomUp(BasePose):
 
         result = {}
 
-        aggregated_heatmaps = None
-        tags_list = []
-        for idx, s in enumerate(sorted(test_scale_factor, reverse=True)):
+        all_outputs = []
+        all_outputs_flipped = []
+        test_scale_factor = sorted(test_scale_factor, reverse=True)
+        for idx, _ in enumerate(test_scale_factor):
             image_resized = aug_data[idx].to(img.device)
 
             features = self.backbone(image_resized)
-            if self.with_keypoint:
-                outputs = self.keypoint_head(features)
+            outputs = self.keypoint_head(features)
+            all_outputs.append(outputs)
 
             if self.test_cfg.get('flip_test', True):
-                # use flip test
-                features_flipped = self.backbone(
-                    torch.flip(image_resized, [3]))
-                if self.with_keypoint:
-                    outputs_flipped = self.keypoint_head(features_flipped)
-            else:
-                outputs_flipped = None
+                features_flipped = self.backbone(torch.flip(image_resized, [3]))
+                outputs_flipped = self.keypoint_head(features_flipped)
+                all_outputs_flipped.append(outputs_flipped)
 
-            _, heatmaps, tags = get_multi_stage_outputs(
-                outputs,
-                outputs_flipped,
-                self.test_cfg['num_joints'],
-                self.test_cfg['with_heatmaps'],
-                self.test_cfg['with_ae'],
-                self.test_cfg['tag_per_joint'],
-                img_metas['flip_index'],
-                self.test_cfg['project2image'],
-                base_size,
-                align_corners=self.use_udp,
-                flip_offset=self.test_cfg.get('flip_offset', 0))
+        aggregated_outputs = self.keypoint_head.aggregate_augm_results(all_outputs, all_outputs_flipped,
+            test_scale_factor, base_size, img_metas['flip_index'], self.use_udp)
 
-            aggregated_heatmaps, tags_list = aggregate_results(
-                s,
-                aggregated_heatmaps,
-                tags_list,
-                heatmaps,
-                tags,
-                test_scale_factor,
-                self.test_cfg['project2image'],
-                self.test_cfg.get('flip_test', True),
-                align_corners=self.use_udp)
+        poses, scores = self.keypoint_head.get_poses(*aggregated_outputs, center=center, scale=scale, use_udp=self.use_udp)
 
-        # average heatmaps of different scales
-        aggregated_heatmaps = aggregated_heatmaps / float(
-            len(test_scale_factor))
-        tags = torch.cat(tags_list, dim=4)
+        # preds = get_group_preds(
+        #     [poses],
+        #     center,
+        #     scale, [aggregated_heatmaps.size(3),
+        #             aggregated_heatmaps.size(2)],
+        #     use_udp=self.use_udp)
 
-        # perform grouping
-        torch.nn.functional.relu(aggregated_heatmaps, inplace=True)
-        maxm = self.kpts_nms_pool(aggregated_heatmaps)
-        maxm = torch.eq(maxm, aggregated_heatmaps).float()
-        aggregated_heatmaps *= 2 * maxm - 1
-        heatmaps_np = aggregated_heatmaps.cpu().numpy()
-        tags_np = tags.cpu().numpy()[..., 0]
-        grouped, scores = self.decoder(heatmaps_np, tags_np, heatmaps_np)
-        # grouped, scores = self.decoder(aggregated_heatmaps.cpu().numpy(), tags.cpu().numpy()[..., 0], nms_heatmaps.cpu().numpy())
-        grouped = [grouped]
-
-        # grouped, scores = self.parser.parse(aggregated_heatmaps, tags,
-        #                                     self.test_cfg['adjust'],
-        #                                     self.test_cfg['refine'])
-
-        preds = get_group_preds(
-            grouped,
-            center,
-            scale, [aggregated_heatmaps.size(3),
-                    aggregated_heatmaps.size(2)],
-            use_udp=self.use_udp)
-
+        # FIXME.
         image_paths = []
         image_paths.append(img_metas['image_file'])
 
@@ -345,7 +403,7 @@ class BottomUp(BasePose):
         else:
             output_heatmap = None
 
-        result['preds'] = preds
+        result['preds'] = poses
         result['scores'] = scores
         result['image_paths'] = image_paths
         result['output_heatmap'] = output_heatmap

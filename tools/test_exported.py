@@ -86,18 +86,23 @@ def main():
 
         heatmaps = result['heatmaps']
         tags = result['embeddings']
-        grouped, scores = model.pt_model.decoder(heatmaps, tags, heatmaps)
+
+        # grouped, scores = model.pt_model.decoder(heatmaps, tags, heatmaps)
         center = img_metas['center']
         scale = img_metas['scale']
-        results = get_group_preds(
-            [grouped],
-            center,
-            scale, [heatmaps.shape[3],
-                    heatmaps.shape[2]],
-            use_udp=model.pt_model.use_udp)
+        poses, scores = model.pt_model.keypoint_head.get_poses(heatmaps, tags, center, scale, model.pt_model.use_udp)
+        # results = get_group_preds(
+        #     [grouped],
+        #     center,
+        #     scale, [heatmaps.shape[3],
+        #             heatmaps.shape[2]],
+        #     use_udp=model.pt_model.use_udp)
         image_path = []
         image_path.extend(img_metas['image_file'])
-        result = (results, scores, image_path, None)
+        result['preds'] = poses
+        result['scores'] = scores
+        result['image_paths'] = image_path
+        result['output_heatmap'] = None
 
         outputs.append(result)
 

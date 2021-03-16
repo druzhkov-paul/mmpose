@@ -1,8 +1,12 @@
+import numpy as np
 import torch
 import torch.nn as nn
 from mmcv.cnn import (build_conv_layer, build_upsample_layer, constant_init,
                       normal_init)
 
+from mmpose.core.evaluation import (aggregate_results, get_group_preds,
+                                    get_multi_stage_outputs)
+from mmpose.core.post_processing.decoder_ae import AssociativeEmbeddingDecoder
 from mmpose.models.builder import build_loss
 from ..backbones.resnet import BasicBlock, Bottleneck
 from ..builder import HEADS
@@ -43,7 +47,8 @@ class BottomUpHigherResolutionHead(nn.Module):
                  block_type='Basic',
                  cat_output=None,
                  with_ae_loss=None,
-                 loss_keypoint=None):
+                 loss_keypoint=None,
+                 test_cfg={}):
         super().__init__()
 
         self.loss = build_loss(loss_keypoint)
@@ -86,6 +91,23 @@ class BottomUpHigherResolutionHead(nn.Module):
             in_channels, deconv_layer_output_channels, num_deconv_layers,
             num_deconv_filters, num_deconv_kernels, num_basic_blocks,
             cat_output, upsample_type, block)
+
+        self.test_cfg = test_cfg
+
+        self.decoder = AssociativeEmbeddingDecoder(
+            num_joints=self.test_cfg['num_joints'],
+            max_num_people=30,
+            detection_threshold=0.1,
+            use_detection_val=True,
+            ignore_too_much=False,
+            tag_threshold=1.0,
+            adjust=self.test_cfg['adjust'],
+            refine=self.test_cfg['refine'],
+            dist_reweight=self.test_cfg.get('dist_reweight', False),
+            delta=self.test_cfg.get('delta', 0.0)
+        )
+        nms_kernel = self.test_cfg['nms_kernel']
+        self.kpts_nms_pool = torch.nn.MaxPool2d(nms_kernel, 1, (nms_kernel - 1) // 2)
 
     @staticmethod
     def _make_final_layers(in_channels, final_layer_output_channels, extra,
@@ -235,6 +257,68 @@ class BottomUpHigherResolutionHead(nn.Module):
 
         return losses
 
+    def aggregate_augm_results(self, outputs, outputs_flipped=(), scale_factors=(1, ),
+                  base_size=(0, 0), flip_index=None, use_udp=False):
+        num_outputs = len(outputs)
+        num_outputs_flipped = len(outputs_flipped)
+        num_outputs_total = max(num_outputs, num_outputs_flipped)
+        assert num_outputs_total > 0
+        assert num_outputs == num_outputs_flipped or min(num_outputs, num_outputs_flipped) == 0
+        assert num_outputs_total == len(scale_factors)
+
+        aggregated_heatmaps = None
+        tags_list = []
+        for idx, s in enumerate(scale_factors):
+            o = outputs[idx] if outputs else None
+            of = outputs_flipped[idx] if outputs_flipped else None
+            _, heatmaps, tags = get_multi_stage_outputs(
+                o,
+                of,
+                self.test_cfg['num_joints'],
+                self.test_cfg['with_heatmaps'],
+                self.test_cfg['with_ae'],
+                self.test_cfg['tag_per_joint'],
+                flip_index,
+                self.test_cfg['project2image'],
+                base_size,
+                align_corners=use_udp,
+                flip_offset=self.test_cfg.get('flip_offset', 0))
+
+            aggregated_heatmaps, tags_list = aggregate_results(
+                s,
+                aggregated_heatmaps,
+                tags_list,
+                heatmaps,
+                tags,
+                scale_factors,
+                self.test_cfg['project2image'],
+                self.test_cfg.get('flip_test', True),
+                align_corners=use_udp)
+
+        # average heatmaps of different scales
+        aggregated_heatmaps = aggregated_heatmaps / float(num_outputs_total)
+        aggregated_tags = torch.cat(tags_list, dim=4)
+
+        # perform grouping
+        torch.nn.functional.relu(aggregated_heatmaps, inplace=True)
+        maxm = self.kpts_nms_pool(aggregated_heatmaps)
+        maxm = torch.eq(maxm, aggregated_heatmaps).float()
+        aggregated_heatmaps *= 2 * maxm - 1
+
+        return aggregated_heatmaps, aggregated_tags
+
+    def get_poses(self, aggregated_heatmaps, aggregated_tags, center=(0, 0), scale=(1, 1), use_udp=False):
+        heatmaps = to_numpy(aggregated_heatmaps)
+        tags = to_numpy(aggregated_tags)[..., 0]
+        grouped_joints, scores = self.decoder(heatmaps, tags, heatmaps)
+        poses = get_group_preds(
+            [grouped_joints],
+            center,
+            scale,
+            [aggregated_heatmaps.shape[3], aggregated_heatmaps.shape[2]],
+            use_udp=use_udp)
+        return poses, scores
+
     def forward(self, x):
         """Forward function."""
         if isinstance(x, list):
@@ -264,3 +348,11 @@ class BottomUpHigherResolutionHead(nn.Module):
         for _, m in self.final_layers.named_modules():
             if isinstance(m, nn.Conv2d):
                 normal_init(m, std=0.001, bias=0)
+
+
+def to_numpy(x, dtype=np.float32):
+    if isinstance(x, torch.Tensor):
+        x = x.cpu().numpy()
+    assert isinstance(x, np.ndarray)
+    x = x.astype(dtype)
+    return x
