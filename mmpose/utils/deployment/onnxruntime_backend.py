@@ -85,5 +85,6 @@ class ModelONNXRuntime:
     def __call__(self, inputs, *args, **kwargs):
         inputs = self.unify_inputs(inputs)
         outputs = self.session.run(None, inputs, *args, **kwargs)
+        # self.pt_model.keypoint_head.get_poses(outputs,)
         outputs = dict(zip(self.output_names, outputs))
         return outputs
