@@ -258,7 +258,7 @@ class BottomUpHigherResolutionHead(nn.Module):
         return losses
 
     def aggregate_augm_results(self, outputs, outputs_flipped=(), scale_factors=(1, ),
-                  base_size=(0, 0), flip_index=None, use_udp=False):
+                  base_size=None, flip_index=None, use_udp=False):
         num_outputs = len(outputs)
         num_outputs_flipped = len(outputs_flipped)
         num_outputs_total = max(num_outputs, num_outputs_flipped)

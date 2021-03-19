@@ -185,8 +185,7 @@ class BottomUp(BasePose):
         if self.with_keypoint:
             output = self.keypoint_head(output)
 
-        aggregated_outputs = self.keypoint_head.aggregate_augm_results([output], [], [1], (0, 0), None, self.use_udp)
-        # _, _, heatmaps, tags = self.keypoint_head.get_poses([output], [], [1], (0, 0), None, self.use_udp)
+        aggregated_outputs = self.keypoint_head.aggregate_augm_results([output], [], [1], None, None, self.use_udp)
         return aggregated_outputs
 
         _, heatmaps, tags = get_multi_stage_outputs(
@@ -198,7 +197,7 @@ class BottomUp(BasePose):
                 self.test_cfg['tag_per_joint'],
                 None,
                 False,  # self.test_cfg['project2image'],
-                (0, 0),  # base_size,
+                None,  # base_size,
                 # This does not depend on the data processing.
                 # It depends on the network itself.
                 align_corners=False)

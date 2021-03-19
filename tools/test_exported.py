@@ -82,10 +82,10 @@ def main():
     for data in data_loader:
         img_metas = data['img_metas'].data[0][0]
         im_data = img_metas['aug_data'][0].cpu().numpy()
-        result = model(im_data)
+        inference_result = model(im_data)
 
-        heatmaps = result['heatmaps']
-        tags = result['embeddings']
+        heatmaps = inference_result['heatmaps']
+        tags = inference_result['embeddings']
 
         # grouped, scores = model.pt_model.decoder(heatmaps, tags, heatmaps)
         center = img_metas['center']
@@ -97,11 +97,10 @@ def main():
         #     scale, [heatmaps.shape[3],
         #             heatmaps.shape[2]],
         #     use_udp=model.pt_model.use_udp)
-        image_path = []
-        image_path.extend(img_metas['image_file'])
+        result = {}
         result['preds'] = poses
         result['scores'] = scores
-        result['image_paths'] = image_path
+        result['image_paths'] = [img_metas['image_file']]
         result['output_heatmap'] = None
 
         outputs.append(result)
