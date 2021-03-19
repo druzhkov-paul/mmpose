@@ -13,6 +13,7 @@ from mmpose.apis import multi_gpu_test, single_gpu_test
 from mmpose.core import wrap_fp16_model
 from mmpose.datasets import build_dataloader, build_dataset
 from mmpose.models import build_posenet
+from mmpose.utils import ExtendedDictAction
 
 
 def parse_args():
@@ -37,13 +38,14 @@ def parse_args():
         help='whether to use gpu to collect results')
     parser.add_argument('--tmpdir', help='tmp dir for writing some results')
     parser.add_argument(
-        '--cfg-options',
+        '--update_config',
         nargs='+',
-        action=DictAction,
+        action=ExtendedDictAction,
+        dest='cfg_options',
         default={},
         help='override some settings in the used config, the key-value pair '
         'in xxx=yyy format will be merged into config file. For example, '
-        "'--cfg-options model.backbone.depth=18 model.backbone.with_cp=True'")
+        "'--update_config model.backbone.depth=18 model.backbone.with_cp=True'")
     parser.add_argument(
         '--launcher',
         choices=['none', 'pytorch', 'slurm', 'mpi'],

@@ -3,6 +3,7 @@ import argparse
 from mmcv import Config
 
 from mmpose.models import build_posenet
+from mmpose.utils import ExtendedDictAction
 
 try:
     from mmcv.cnn import get_model_complexity_info
@@ -19,6 +20,7 @@ def parse_args():
         nargs='+',
         default=[256, 192],
         help='input image size')
+    parser.add_argument('--update_config', nargs='+', action=ExtendedDictAction, help='arguments in dict')
     args = parser.parse_args()
     return args
 
@@ -35,6 +37,8 @@ def main():
         raise ValueError('invalid input shape')
 
     cfg = Config.fromfile(args.config)
+    if args.update_config is not None:
+        cfg.merge_from_dict(args.update_config)
     model = build_posenet(cfg.model)
     model = model.cuda()
     model.eval()

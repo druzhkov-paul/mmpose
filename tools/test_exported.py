@@ -11,6 +11,7 @@ from mmpose.apis import multi_gpu_test, single_gpu_test
 from mmpose.core import wrap_fp16_model
 from mmpose.datasets import build_dataloader, build_dataset
 from mmpose.models import build_posenet
+from mmpose.utils import ExtendedDictAction
 from mmpose.utils.deployment.onnxruntime_backend import ModelONNXRuntime
 from mmpose.utils.deployment.openvino_backend import Model as ModelOpenVINO
 from mmpose.core.evaluation import (aggregate_results, get_group_preds,
@@ -29,6 +30,15 @@ def parse_args():
         nargs='+',
         help='evaluation metric, which depends on the dataset,'
         ' e.g., "mAP" for MSCOCO')
+    parser.add_argument(
+        '--update_config',
+        nargs='+',
+        action=ExtendedDictAction,
+        dest='cfg_options',
+        default={},
+        help='override some settings in the used config, the key-value pair '
+        'in xxx=yyy format will be merged into config file. For example, '
+        "'--update_config model.backbone.depth=18 model.backbone.with_cp=True'")
     args = parser.parse_args()
     return args
 
@@ -48,6 +58,8 @@ def main():
     args = parse_args()
 
     cfg = mmcv.Config.fromfile(args.config)
+    if args.cfg_options is not None:
+        cfg.merge_from_dict(args.cfg_options)
     cfg.model.pretrained = None
     cfg.data.test.test_mode = True
 
