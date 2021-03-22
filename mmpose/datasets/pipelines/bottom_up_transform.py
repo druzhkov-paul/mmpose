@@ -461,8 +461,12 @@ class BottomUpRandomAffine:
         # aug_rot = 0.0
 
         if self.trans_factor > 0:
-            dx = (2 * np.random.random() - 1) * self.trans_factor * width * aug_scale
-            dy = (2 * np.random.random() - 1) * self.trans_factor * height * aug_scale
+            dx = np.random.randint(-self.trans_factor * scale / 200.0,
+                                   self.trans_factor * scale / 200.0)
+            dy = np.random.randint(-self.trans_factor * scale / 200.0,
+                                   self.trans_factor * scale / 200.0)
+            # dx = (2 * np.random.random() - 1) * self.trans_factor * width * aug_scale
+            # dy = (2 * np.random.random() - 1) * self.trans_factor * height * aug_scale
             center[0] += dx
             center[1] += dy
 
