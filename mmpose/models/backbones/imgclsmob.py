@@ -3,13 +3,21 @@ import tempfile
 import types
 
 import torch.nn as nn
+from mmcv.runner import get_dist_info
 from mmpose.utils import get_root_logger
 from pytorchcv.model_provider import _models
 from torch.nn.modules.batchnorm import _BatchNorm
 
+from .efficient_hrnet import (efficienthrnet_bm0, efficienthrnet_bm1,
+    efficienthrnet_bm2, efficienthrnet_bm3, efficienthrnet_bm4)
 from ..registry import BACKBONES
 
-from mmcv.runner import get_dist_info
+
+_models['efficienthrnet_bm0'] = efficienthrnet_bm0
+_models['efficienthrnet_bm1'] = efficienthrnet_bm1
+_models['efficienthrnet_bm2'] = efficienthrnet_bm2
+_models['efficienthrnet_bm3'] = efficienthrnet_bm3
+_models['efficienthrnet_bm4'] = efficienthrnet_bm4
 
 
 def generate_backbones():
