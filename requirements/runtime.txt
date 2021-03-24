@@ -7,5 +7,8 @@ munkres
 numpy
 opencv-python
 pillow
+pytorchcv>=0.0.55
 scipy
+torch==1.5.1
+torchvision==0.6.1
 xtcocotools>=1.6
