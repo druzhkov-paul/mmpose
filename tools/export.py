@@ -167,8 +167,8 @@ def parse_args():
     parser = argparse.ArgumentParser(
         description='Export MMPose models to ONNX/OpenVINO')
     parser.add_argument('config', help='test config file path')
+    parser.add_argument('checkpoint', help="path to file with model's weights")
     parser.add_argument('output_dir', help='path to directory to save exported models in')
-    parser.add_argument('-ckpt', '--checkpoint', default=None, help='checkpoint file')
     parser.add_argument('--opset', type=int, default=11)
     parser.add_argument('--show', action='store_true', help='show onnx graph')
     parser.add_argument(
