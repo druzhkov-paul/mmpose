@@ -126,19 +126,21 @@ def export_to_openvino(cfg, onnx_model_path, output_dir_path, input_shape=None, 
         print('read channel order from config')
         channel_order = load_image_stage[0].get('channel_order', 'rgb')
 
-    try:
-        bura = [v for v in cfg.data.test.pipeline if v['type'] == 'BottomUpResizeAlign'][0]
-        print(bura)
-        normalize = [v for v in bura['transforms'] if v['type'] == 'NormalizeTensor'][0]
-        print(normalize)
-        print('read mean/std from config')
-        # FIXME. Should those be reversed?
-        mean_values = list(x * 255 for x in normalize['mean'])
-        scale_values = list(x * 255 for x in normalize['std'])
-    except Exception as ex:
-        print(ex)
-        mean_values = [0, 0, 0]
-        scale_values = [1, 1, 1]
+    mean_values = [0, 0, 0]
+    scale_values = [1, 1, 1]
+    # try:
+    #     bura = [v for v in cfg.data.test.pipeline if v['type'] == 'BottomUpResizeAlign'][0]
+    #     print(bura)
+    #     normalize = [v for v in bura['transforms'] if v['type'] == 'NormalizeTensor'][0]
+    #     print(normalize)
+    #     print('read mean/std from config')
+    #     # FIXME. Should those be reversed?
+    #     mean_values = list(x * 255 for x in normalize['mean'])
+    #     scale_values = list(x * 255 for x in normalize['std'])
+    # except Exception as ex:
+    #     print(ex)
+    #     mean_values = [0, 0, 0]
+    #     scale_values = [1, 1, 1]
 
     command_line = f'mo.py --input_model="{onnx_model_path}" ' \
                    f'--mean_values="{mean_values}" ' \
@@ -150,8 +152,8 @@ def export_to_openvino(cfg, onnx_model_path, output_dir_path, input_shape=None, 
 
     if input_shape is not None:
         command_line += f' --input_shape="{input_shape}"'
-    if channel_order != input_format.lower() == 'bgr':
-        command_line += ' --reverse_input_channels'
+    # if channel_order != input_format.lower() == 'bgr':
+    #     command_line += ' --reverse_input_channels'
 
     print(command_line)
 

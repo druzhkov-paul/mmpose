@@ -67,6 +67,25 @@ def main():
                              osp.splitext(osp.basename(args.config))[0])
     mmcv.mkdir_or_exist(osp.abspath(args.work_dir))
 
+    # build the model and load checkpoint
+    if args.model.endswith('.onnx'):
+        model = ModelONNXRuntime(args.model, cfg)
+    elif args.model.endswith('.xml'):
+        model = ModelOpenVINO(args.model, device=args.device, cfg=cfg)
+
+        # cfg.data.test.pipeline[0]['channel_order'] = 'bgr'
+        # bura = [v for v in cfg.data.test.pipeline if v['type'] == 'BottomUpResizeAlign'][0]
+        # print(bura)
+        # normalize = [v for v in bura['transforms'] if v['type'] == 'NormalizeTensor'][0]
+        # print(normalize)
+        # print('read mean/std from config')
+        # normalize['mean'] = [0, 0, 0]
+        # normalize['std'] = [1. / 255., 1. / 255., 1. / 255.]
+        # print(bura)
+
+    else:
+        raise ValueError('Unknown model type.')
+
     # build the dataloader
     dataset = build_dataset(cfg.data.test, dict(test_mode=True))
     dataloader_setting = dict(
@@ -79,14 +98,6 @@ def main():
     dataloader_setting = dict(dataloader_setting,
                               **cfg.data.get('test_dataloader', {}))
     data_loader = build_dataloader(dataset, **dataloader_setting)
-
-    # build the model and load checkpoint
-    if args.model.endswith('.onnx'):
-        model = ModelONNXRuntime(args.model, cfg)
-    elif args.model.endswith('.xml'):
-        model = ModelOpenVINO(args.model, device=args.device, cfg=cfg)
-    else:
-        raise ValueError('Unknown model type.')
 
     outputs = []
     dataset = data_loader.dataset
