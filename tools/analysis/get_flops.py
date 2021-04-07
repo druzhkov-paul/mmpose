@@ -2,6 +2,7 @@ import argparse
 import json
 
 from mmcv import Config
+import torch
 
 from mmpose.models import build_posenet
 from mmpose.utils import ExtendedDictAction
@@ -42,7 +43,8 @@ def main():
     if args.update_config is not None:
         cfg.merge_from_dict(args.update_config)
     model = build_posenet(cfg.model)
-    model = model.cuda()
+    if torch.cuda.is_available():
+        model = model.cuda()
     model.eval()
 
     if hasattr(model, 'forward_dummy'):
