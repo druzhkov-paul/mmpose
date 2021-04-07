@@ -5,6 +5,7 @@ from mmcv.runner import DistSamplerSeedHook, EpochBasedRunner, OptimizerHook
 from mmpose.core import (DistEvalHook, EvalHook, Fp16OptimizerHook,
                          build_optimizers)
 from mmpose.core.distributed_wrapper import DistributedDataParallelWrapper
+from mmpose.core.utils import MMDataCPU
 from mmpose.datasets import build_dataloader, build_dataset
 from mmpose.utils import get_root_logger
 
@@ -50,28 +51,33 @@ def train_model(model,
     # determine wether use adversarial training precess or not
     use_adverserial_train = cfg.get('use_adversarial_train', False)
 
-    # put model on gpus
-    if distributed:
-        find_unused_parameters = cfg.get('find_unused_parameters', True)
-        # Sets the `find_unused_parameters` parameter in
-        # torch.nn.parallel.DistributedDataParallel
+    map_location = 'default'
+    if torch.cuda.is_available():
+        # put model on gpus
+        if distributed:
+            find_unused_parameters = cfg.get('find_unused_parameters', True)
+            # Sets the `find_unused_parameters` parameter in
+            # torch.nn.parallel.DistributedDataParallel
 
-        if use_adverserial_train:
-            # Use DistributedDataParallelWrapper for adversarial training
-            model = DistributedDataParallelWrapper(
-                model,
-                device_ids=[torch.cuda.current_device()],
-                broadcast_buffers=False,
-                find_unused_parameters=find_unused_parameters)
+            if use_adverserial_train:
+                # Use DistributedDataParallelWrapper for adversarial training
+                model = DistributedDataParallelWrapper(
+                    model,
+                    device_ids=[torch.cuda.current_device()],
+                    broadcast_buffers=False,
+                    find_unused_parameters=find_unused_parameters)
+            else:
+                model = MMDistributedDataParallel(
+                    model.cuda(),
+                    device_ids=[torch.cuda.current_device()],
+                    broadcast_buffers=False,
+                    find_unused_parameters=find_unused_parameters)
         else:
-            model = MMDistributedDataParallel(
-                model.cuda(),
-                device_ids=[torch.cuda.current_device()],
-                broadcast_buffers=False,
-                find_unused_parameters=find_unused_parameters)
+            model = MMDataParallel(
+                model.cuda(cfg.gpu_ids[0]), device_ids=cfg.gpu_ids)
     else:
-        model = MMDataParallel(
-            model.cuda(cfg.gpu_ids[0]), device_ids=cfg.gpu_ids)
+        model = MMDataCPU(model)
+        map_location = 'cpu'
 
     # build runner
     optimizer = build_optimizers(model, cfg.optimizer)
@@ -126,7 +132,7 @@ def train_model(model,
         runner.register_hook(eval_hook(val_dataloader, **eval_cfg))
 
     if cfg.resume_from:
-        runner.resume(cfg.resume_from)
+        runner.resume(cfg.resume_from, map_location=map_location)
     elif cfg.load_from:
-        runner.load_checkpoint(cfg.load_from)
+        runner.load_checkpoint(cfg.load_from, map_location=map_location)
     runner.run(data_loaders, cfg.workflow, cfg.total_epochs)
