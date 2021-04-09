@@ -103,8 +103,8 @@ class BottomUpHigherResolutionHead(nn.Module):
             tag_threshold=1.0,
             adjust=self.test_cfg['adjust'],
             refine=self.test_cfg['refine'],
-            dist_reweight=self.test_cfg.get('dist_reweight', False),
-            delta=self.test_cfg.get('delta', 0.0)
+            dist_reweight=self.test_cfg.get('dist_reweight', True),
+            delta=self.test_cfg.get('delta', 0.5)
         )
         nms_kernel = self.test_cfg['nms_kernel']
         self.kpts_nms_pool = torch.nn.MaxPool2d(nms_kernel, 1, (nms_kernel - 1) // 2)
