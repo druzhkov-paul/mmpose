@@ -25,6 +25,7 @@ class EHRNet(nn.Module):
         if isinstance(pretrained, str):
             from mmpose.utils import get_root_logger
             logger = get_root_logger()
+            # load_checkpoint(self.module, pretrained, strict=False, map_location='cpu', logger=logger)
             load_checkpoint(self.module, pretrained, strict=False, logger=logger)
 
     def forward(self, x):

@@ -150,7 +150,6 @@ class HeatmapParser:
         self.pool = torch.nn.MaxPool2d(cfg['nms_kernel'], 1,
                                        cfg['nms_padding'])
         self.use_udp = cfg.get('use_udp', False)
-        # self.use_udp = False
         self.delta = 0.0
 
     def nms(self, heatmaps):

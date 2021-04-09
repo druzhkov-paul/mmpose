@@ -166,25 +166,6 @@ class BottomUpHigherResolutionHeadDecoupled(BottomUpHigherResolutionHead):
 
         flip_test = outputs_flip is not None
 
-        # # aggregate heatmaps from different stages
-        # for i, output in enumerate(outputs):
-        #     if i != len(outputs) - 1:
-        #         output = torch.nn.functional.interpolate(
-        #             output,
-        #             size=(outputs[-1].size(2), outputs[-1].size(3)),
-        #             mode='bilinear',
-        #             align_corners=align_corners)
-
-        #     # staring index of the associative embeddings
-        #     offset_feat = num_joints if with_heatmaps[i] else 0
-
-        #     if with_heatmaps[i]:
-        #         heatmaps_avg += output[:, :num_joints]
-        #         num_heatmaps += 1
-
-        #     if with_ae[i]:
-        #         tags.append(output[:, offset_feat:])
-
         target_size = outputs[-1][0].shape
         # aggregate heatmaps from different stages
         for i, output in enumerate(outputs):

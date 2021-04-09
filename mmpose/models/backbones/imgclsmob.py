@@ -48,7 +48,6 @@ def generate_backbones():
                     if i == last_stage:
                         break
 
-                # FIXME.
                 if len(outputs) == 1:
                     outputs = outputs[0]
 

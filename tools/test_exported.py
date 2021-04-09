@@ -110,16 +110,9 @@ def main():
         heatmaps = inference_result['heatmaps']
         tags = inference_result['embeddings']
 
-        # grouped, scores = model.pt_model.decoder(heatmaps, tags, heatmaps)
         center = img_metas['center']
         scale = img_metas['scale']
         poses, scores = model.pt_model.keypoint_head.get_poses(heatmaps, tags, center, scale, model.pt_model.use_udp)
-        # results = get_group_preds(
-        #     [grouped],
-        #     center,
-        #     scale, [heatmaps.shape[3],
-        #             heatmaps.shape[2]],
-        #     use_udp=model.pt_model.use_udp)
         result = {}
         result['preds'] = poses
         result['scores'] = scores
