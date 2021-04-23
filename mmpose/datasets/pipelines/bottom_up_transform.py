@@ -175,11 +175,6 @@ def _resize_align_multi_scale_udp(image, input_size, current_scale, min_scale, s
         roi_center=np.array(scale, dtype=np.float) / 2,
         size_dst=np.array(size_resized, dtype=np.float) - 1.0,
         roi_size=np.array(scale, dtype=np.float))
-    # print(f'scale = {scale}')
-    # print(f'size_resized = {size_resized}')
-    # print(trans)
-    # print(cv2.invertAffineTransform(trans))
-    # print((image.shape[1] - 1, image.shape[0] - 1), '->', (trans @ np.array([image.shape[1] - 1, image.shape[0] - 1, 1], dtype=np.float)[:, None])[:, 0])
     image_resized = cv2.warpAffine(
         image.copy(), trans, size_resized, flags=cv2.INTER_LINEAR)
 
@@ -205,15 +200,10 @@ class HeatmapGeneratorCustom:
             for idx, pt in enumerate(p):
                 if pt[2] > 0:
                     x, y = pt[0], pt[1]
-                    # if x < 0 or y < 0 or \
-                    #    x >= self.output_res or y >= self.output_res:
-                    #     continue
-
                     s = -0.5 / (sigma ** 2)
                     kx = np.exp((self.x - x) ** 2 * s)
                     ky = np.exp((self.y - y) ** 2 * s)
                     g = kx * ky
-
                     hms[idx, ...] = np.maximum(hms[idx, ...], g)
         return hms
 
@@ -437,11 +427,6 @@ class BottomUpRandomAffine:
                                                     len(self.output_size),
                                                     self.output_size)
 
-        # print(results['ann_info'])
-        # print(image.shape)
-        # print(self.output_size)
-        # print('-' * 30)
-
         height, width = image.shape[:2]
         if self.use_udp:
             center = np.array(((width - 1.0) / 2, (height - 1.0) / 2))
@@ -455,10 +440,8 @@ class BottomUpRandomAffine:
             raise ValueError('Unknown scale type: {}'.format(self.scale_type))
         aug_scale = np.random.random() * (self.max_scale - self.min_scale) \
             + self.min_scale
-        # aug_scale = 1.0
         scale *= aug_scale
         aug_rot = (np.random.random() * 2 - 1) * self.max_rotation
-        # aug_rot = 0.0
 
         if self.trans_factor > 0:
             dx = np.random.randint(-self.trans_factor * scale / 200.0,
@@ -478,9 +461,6 @@ class BottomUpRandomAffine:
                     size_dst=np.array(
                         (_output_size, _output_size), dtype=np.float) - 1.0,
                     roi_size=np.array((scale, scale), dtype=np.float))
-                # print(f'output size: {_output_size}')
-                # print(trans)
-                # print(cv2.invertAffineTransform(trans))
                 mask[i] = cv2.warpAffine(
                     (mask[i] * 255).astype(np.uint8),
                     trans, (int(_output_size), int(_output_size)),
@@ -496,17 +476,10 @@ class BottomUpRandomAffine:
                 size_dst=np.array(
                     (self.input_size, self.input_size), dtype=np.float) - 1.0,
                 roi_size=np.array((scale, scale), dtype=np.float))
-            # print(f'input size: {self.input_size}')
-            # print(f'scale: {scale}')
-            # print(mat_input)
-            # print(cv2.invertAffineTransform(mat_input))
-            # cv2.imshow('orig', image)
             image = cv2.warpAffine(
                 image,
                 mat_input, (int(self.input_size), int(self.input_size)),
                 flags=cv2.INTER_LINEAR)
-            # cv2.imshow('warped', image)
-            # cv2.waitKey(0)
         else:
             for i, _output_size in enumerate(self.output_size):
                 mat_output = self._get_affine_matrix(center, scale,
@@ -526,7 +499,7 @@ class BottomUpRandomAffine:
                                                 (self.input_size,
                                                  self.input_size), aug_rot)[:2]
             image = cv2.warpAffine(image, mat_input,
-                                   (self.input_size, self.input_size))
+                                   (int(self.input_size), int(self.input_size)))
 
         results['img'], results['mask'], results[
             'joints'] = image, mask, joints
@@ -565,15 +538,6 @@ class Albu:
         self.update_pad_shape = update_pad_shape
         self.skip_img_without_anno = skip_img_without_anno
         self.scales = scales
-
-        # # A simple workaround to remove masks without boxes
-        # if bbox_params is not None:
-        #     if 'label_fields' in bbox_params and bbox_params.get('filter_lost_elements', False):
-        #         self.filter_lost_elements = True
-        #         self.origin_label_fields = bbox_params['label_fields']
-        #         bbox_params['label_fields'] = ['idx_mapper']
-        #     if 'filter_lost_elements' in bbox_params:
-        #         del bbox_params['filter_lost_elements']
 
         if kp_params is not None:
             self.kp_filter_lost_elements = kp_params.get('filter_lost_elements', False)
@@ -658,8 +622,6 @@ class Albu:
         # dict to albumentations format
         results = self.mapper(results, self.keymap_to_albu)
 
-        # print('# of masks before transforms: ', results['masks'].shape)
-
         if 'bboxes' in results:
             # to list of boxes
             if isinstance(results['bboxes'], np.ndarray):
@@ -672,13 +634,10 @@ class Albu:
             assert len(results['keypoints']) == len(self.scales)
             results['keypoints'] = results['keypoints'][0]
             keypoints_per_instance = results['keypoints'].shape[1]
-            # print(results['keypoints'].shape)
             results['keypoints_visibility'] = results['keypoints'][:, :, 2].reshape(-1)
             results['keypoints'] = results['keypoints'][:, :, :2].reshape(-1, 2)
-            # print(results['keypoints'].shape)
             results['keypoints'] = results['keypoints'].tolist()
             keypoints_num = len(results['keypoints'])
-            # print(keypoints_num)
             if self.kp_filter_lost_elements:
                 results['kp_idx_mapper'] = np.arange(keypoints_num)
 
@@ -686,16 +645,6 @@ class Albu:
             masks = results['masks']
             for i, m in enumerate(masks):
                 masks[i] = m.astype(np.uint8)
-        # if 'masks' in results:
-            # assert len(results['masks']) == len(self.scales)
-            # print(len(results['masks']))
-            # print(results['masks'][0].shape)
-            # for x, y in zip(*results['masks']):
-            #     assert x.shape == y.shape
-            # results['masks'] = list(m for m in results['masks'][0])
-            # print(len(results['masks']))
-            # print(results['masks'][0].shape)
-            # results['masks'] = np.concatenate(results['masks'], axis=0)
 
         results = self.aug(**results)
 
@@ -707,7 +656,6 @@ class Albu:
 
             # filter label_fields
             if self.filter_lost_elements:
-                # print('filter lost bboxes')
 
                 results['idx_mapper'] = np.arange(len(results['bboxes']))
 
@@ -723,24 +671,16 @@ class Albu:
                     return None
 
         if 'masks' in results:
-            # results['masks'] = np.asarray(results['masks'])
-            # print('# of masks after transforms: ', results['masks'].shape)
-            # results['masks'] = np.split(results['masks'], len(self.scales), axis=0)
-            # m = np.concatenate(results['masks'])
-            # results['masks'] = list(m.copy() for _ in self.scales)
-
             for i, s in enumerate(self.scales):
                 w, h = results['masks'][i].shape
                 results['masks'][i] = cv2.resize(results['masks'][i], dsize=(int(w / s), int(h / s)), interpolation=cv2.INTER_LINEAR) > 0.5
 
         if 'keypoints' in results:
             results['keypoints'] = np.asarray(results['keypoints'], dtype=np.float32)
-            # print(results['keypoints'].shape)
 
             if self.kp_filter_lost_elements:
                 idx = np.asarray(results['kp_idx_mapper'], dtype=np.long)
                 kps = np.zeros([keypoints_num, 2], dtype=np.float32)
-                # print(kps.shape)
                 if len(idx) > 0:
                     kps[idx, ...] = results['keypoints']
                 results['keypoints'] = kps
@@ -749,14 +689,8 @@ class Albu:
                 visibility[idx] = results['keypoints_visibility'].flatten()[idx]
                 results['keypoints_visibility'] = visibility.reshape(-1, keypoints_per_instance)
 
-                # results['kp_idx_mapper'] = np.arange(len(results['keypoints']))
-                # if (not len(results['kp_idx_mapper']) and self.skip_img_without_anno):
-                #     return None
-
-            # print(results['keypoints'].shape)
             results['keypoints'] = results['keypoints'].reshape(-1, keypoints_per_instance, 2)
             results['keypoints'] = np.concatenate([results['keypoints'], results['keypoints_visibility'][:, :, None]], axis=2)
-            # results['keypoints'] = np.split(results['keypoints'], len(self.scales), axis=0)
             results['keypoints'] = [np.copy(results['keypoints']) for s in self.scales]
             for i, s in enumerate(self.scales):
                 results['keypoints'][i][..., :2] /= s
@@ -824,10 +758,6 @@ class Albu:
                 visibility[idx] = results['keypoints_visibility'][idx]
                 results['keypoints_visibility'] = visibility
 
-                # results['kp_idx_mapper'] = np.arange(len(results['keypoints']))
-                # if (not len(results['kp_idx_mapper']) and self.skip_img_without_anno):
-                #     return None
-
             kpts = results['keypoints'].reshape(-1, keypoints_per_instance, 2)
             visibility = results['keypoints_visibility'].reshape(-1, keypoints_per_instance, 1)
             kpts = np.concatenate([kpts, visibility], axis=2)
@@ -881,10 +811,6 @@ class BottomUpGenerateTarget:
             HeatmapGeneratorCustom(output_size, num_joints, self.sigma)
             for output_size in heatmap_size
         ]
-        # heatmap_generator = [
-        #     HeatmapGenerator(output_size, num_joints, self.sigma, self.use_udp)
-        #     for output_size in heatmap_size
-        # ]
         joints_encoder = [
             JointsEncoder(self.max_num_people, num_joints, output_size, True)
             for output_size in heatmap_size
@@ -1006,19 +932,10 @@ class BottomUpResizeAlign:
         test_scale_factor = results['ann_info']['test_scale_factor']
         aug_data = []
 
-        # print(f'test_scale_factors = {test_scale_factor}')
-        # print('*' * 30)
         for _, s in enumerate(sorted(test_scale_factor, reverse=True)):
             _results = results.copy()
-            # print('-' * 30)
-            # print(f'scale = {s}')
-            # print(f'net input size = {input_size}')
-            # img_shape = _results['img'].shape
-            # print(f'image shape = {img_shape}')
             image_resized, _, _ = self._resize_align_multi_scale(
                 _results['img'], input_size, s, min(test_scale_factor), self.size_divisor)
-            # print(f'resize image shape = {image_resized.shape}')
-            # print('=' * 30)
             _results['img'] = image_resized
             _results = self.transforms(_results)
             transformed_img = _results['img'].unsqueeze(0)
