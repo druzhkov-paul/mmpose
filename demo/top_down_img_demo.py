@@ -1,3 +1,4 @@
+import json
 import os
 from argparse import ArgumentParser
 
@@ -67,10 +68,11 @@ def main():
         # make person bounding boxes
         person_results = []
         for ann_id in ann_ids:
-            person = {}
+            # person = {}
             ann = coco.anns[ann_id]
             # bbox format is 'xywh'
-            person['bbox'] = ann['bbox']
+            # person['bbox'] = ann['bbox']
+            person = ann
             person_results.append(person)
 
         # test a single image, with a list of bboxes
@@ -84,20 +86,33 @@ def main():
             return_heatmap=return_heatmap,
             outputs=output_layer_names)
 
-        if args.out_img_root == '':
-            out_file = None
-        else:
-            os.makedirs(args.out_img_root, exist_ok=True)
-            out_file = os.path.join(args.out_img_root, f'vis_{i}.jpg')
+        for person, pose in zip(person_results, pose_results):
+            person['num_keypoints'] = len(pose['keypoints'])
+            pose['keypoints'][:, 2] = 2
+            person['keypoints'] = pose['keypoints'].astype(int).ravel().tolist()
 
-        vis_pose_result(
-            pose_model,
-            image_name,
-            pose_results,
-            dataset=dataset,
-            kpt_score_thr=args.kpt_thr,
-            show=args.show,
-            out_file=out_file)
+        # for x, y in zip(person_results, pose_results):
+        #     x.update(y)
+
+        print(person_results)
+
+        # if args.out_img_root == '':
+        #     out_file = None
+        # else:
+        #     os.makedirs(args.out_img_root, exist_ok=True)
+        #     out_file = os.path.join(args.out_img_root, f'vis_{i}.jpg')
+
+        # vis_pose_result(
+        #     pose_model,
+        #     image_name,
+        #     pose_results,
+        #     dataset=dataset,
+        #     kpt_score_thr=args.kpt_thr,
+        #     show=args.show,
+        #     out_file=out_file)
+
+    with open(os.path.join(args.out_img_root, 'annotation.json'), 'wt') as f:
+        json.dump(coco.dataset, f)
 
 
 if __name__ == '__main__':
