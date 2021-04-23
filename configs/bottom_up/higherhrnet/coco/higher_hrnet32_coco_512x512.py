@@ -122,10 +122,7 @@ model = dict(
         ignore_too_much=False,
         adjust=True,
         refine=True,
-        delta=0.5,
-        dist_reweight=True,
-        flip_test=True),
-)
+        flip_test=True))
 
 train_pipeline = [
     dict(type='LoadImageFromFile'),
@@ -154,7 +151,7 @@ train_pipeline = [
 
 val_pipeline = [
     dict(type='LoadImageFromFile'),
-    dict(type='BottomUpGetImgSize', test_scale_factor=[1]),
+    dict(type='BottomUpGetImgSize', test_scale_factor=[1], use_udp=False, size_divisor=32),
     dict(
         type='BottomUpResizeAlign',
         transforms=[
@@ -162,8 +159,10 @@ val_pipeline = [
             dict(
                 type='NormalizeTensor',
                 mean=[0.485, 0.456, 0.406],
-                std=[0.229, 0.224, 0.225]),
-        ]),
+                std=[0.229, 0.224, 0.225])
+        ],
+        use_udp=False,
+        size_divisor=32),
     dict(
         type='Collect',
         keys=['img'],
@@ -182,19 +181,19 @@ data = dict(
     train=dict(
         type='BottomUpCocoDataset',
         ann_file=f'{data_root}/annotations/person_keypoints_train2017.json',
-        img_prefix=f'{data_root}/train2017/',
+        img_prefix=f'{data_root}/images/train2017/',
         data_cfg=data_cfg,
         pipeline=train_pipeline),
     val=dict(
         type='BottomUpCocoDataset',
         ann_file=f'{data_root}/annotations/person_keypoints_val2017.json',
-        img_prefix=f'{data_root}/val2017/',
+        img_prefix=f'{data_root}/images/val2017/',
         data_cfg=data_cfg,
         pipeline=val_pipeline),
     test=dict(
         type='BottomUpCocoDataset',
         ann_file=f'{data_root}/annotations/person_keypoints_val2017.json',
-        img_prefix=f'{data_root}/val2017/',
+        img_prefix=f'{data_root}/images/val2017/',
         data_cfg=data_cfg,
         pipeline=val_pipeline),
 )
