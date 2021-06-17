@@ -77,7 +77,7 @@ def pytorch2onnx(model,
         verbose=show,
         opset_version=opset_version,
         input_names=['image'],
-        output_names=['heatmaps', 'embeddings'],
+        output_names=None,
         dynamic_axes = {
             "image": {
                 2: "height",
@@ -117,7 +117,7 @@ def pytorch2onnx(model,
 def export_to_openvino(cfg, onnx_model_path, output_dir_path, input_shape=None, input_format='rgb'):
     cfg.model.pretrained = None
 
-    output_names = 'heatmaps,embeddings'
+    output_names = ''
 
     # Channel order is defined by LoadImage transform. By default it is 'rgb'.
     channel_order = 'rgb'
@@ -126,21 +126,14 @@ def export_to_openvino(cfg, onnx_model_path, output_dir_path, input_shape=None, 
         print('read channel order from config')
         channel_order = load_image_stage[0].get('channel_order', 'rgb')
 
-    mean_values = [0, 0, 0]
-    scale_values = [1, 1, 1]
-    # try:
-    #     bura = [v for v in cfg.data.test.pipeline if v['type'] == 'BottomUpResizeAlign'][0]
-    #     print(bura)
-    #     normalize = [v for v in bura['transforms'] if v['type'] == 'NormalizeTensor'][0]
-    #     print(normalize)
-    #     print('read mean/std from config')
-    #     # FIXME. Should those be reversed?
-    #     mean_values = list(x * 255 for x in normalize['mean'])
-    #     scale_values = list(x * 255 for x in normalize['std'])
-    # except Exception as ex:
-    #     print(ex)
-    #     mean_values = [0, 0, 0]
-    #     scale_values = [1, 1, 1]
+    print (cfg.data.test.pipeline)
+    normalize = [v for v in cfg.data.test.pipeline if v['type'] == 'NormalizeTensor'][0]
+    print(normalize)
+    print('read mean/std from config')
+    # FIXME. Should those be reversed?
+    mean_values = list(x * 255 for x in normalize['mean'])
+    scale_values = list(x * 255 for x in normalize['std'])
+
 
     command_line = f'mo.py --input_model="{onnx_model_path}" ' \
                    f'--mean_values="{mean_values}" ' \
@@ -236,5 +229,5 @@ if __name__ == '__main__':
             image_size = cfg['data']['test']['data_cfg']['image_size']
         except KeyError:
             image_size = cfg['image_size']
-        input_shape = (1, 3, image_size, image_size)
+        input_shape = (1, 3, image_size[0], image_size[1])
         export_to_openvino(cfg, onnx_model_path, args.output_dir, input_shape, args.input_format)

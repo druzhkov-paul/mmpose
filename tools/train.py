@@ -7,7 +7,7 @@ import time
 import mmcv
 import torch
 from mmcv import Config
-from mmcv.runner import init_dist, set_random_seed, get_dist_info
+from mmcv.runner import init_dist, set_random_seed
 from mmcv.utils import get_git_hash
 
 from mmpose import __version__
@@ -70,93 +70,6 @@ def parse_args():
     return args
 
 
-def determine_max_batch_size(cfg, distributed, dataset_len_per_gpu):
-    def get_fake_input(cfg, orig_img_shape=(128, 128, 3), device='cuda'):
-        test_pipeline = [LoadImage()] + cfg.data.test.pipeline[1:]
-        test_pipeline = Compose(test_pipeline)
-        data = dict(img=np.zeros(orig_img_shape, dtype=np.uint8))
-        data = test_pipeline(data)
-        data = scatter(collate([data], samples_per_gpu=1), [device])[0]
-        return data
-
-    model = build_detector(
-        cfg.model, train_cfg=cfg.train_cfg, test_cfg=cfg.test_cfg).cuda()
-
-    if 'pipeline' in cfg.data.train:
-        img_shape = [t for t in cfg.data.train.pipeline if t['type'] == 'Resize'][0]['img_scale']
-    else:
-        img_shape = [t for t in cfg.data.train.dataset.pipeline if t['type'] == 'Resize'][0][
-            'img_scale']
-
-    channels = 3
-
-    fake_input = get_fake_input(cfg, orig_img_shape=list(img_shape) + [channels])
-    img_shape = fake_input['img_metas'][0][0]['pad_shape']
-
-    width, height = img_shape[0], img_shape[1]
-
-    percentage = 0.9
-
-    min_bs = 2
-    max_bs = min(512, int(dataset_len_per_gpu / percentage) + 1)
-    step = 1
-
-    batch_size = min_bs
-    for bs in range(min_bs, max_bs, step):
-        try:
-            gt_boxes = [torch.tensor([[0., 0., width, height]]).cuda() for _ in range(bs)]
-            gt_labels = [torch.tensor([0], dtype=torch.long).cuda() for _ in range(bs)]
-            img_metas = [fake_input['img_metas'][0][0] for _ in range(bs)]
-
-            gt_masks = None
-
-            if isinstance(model, TwoStageDetector) and model.roi_head.with_mask:
-                rles = maskUtils.frPyObjects(
-                    [[0.0, 0.0, width, 0.0, width, height, 0.0, height]], height, width)
-                rle = maskUtils.merge(rles)
-                mask = maskUtils.decode(rle)
-                gt_masks = [BitmapMasks([mask], height, width) for _ in range(bs)]
-
-            if gt_masks is None:
-                model(torch.rand(bs, channels, height, width).cuda(), img_metas=img_metas,
-                      gt_bboxes=gt_boxes, gt_labels=gt_labels)
-            else:
-                model(torch.rand(bs, channels, height, width).cuda(), img_metas=img_metas,
-                      gt_bboxes=gt_boxes, gt_labels=gt_labels, gt_masks=gt_masks)
-
-            batch_size = bs
-        except RuntimeError as e:
-            if str(e).startswith('CUDA out of memory'):
-                break
-
-    resulting_batch_size = int(batch_size * percentage)
-
-    del model
-    torch.cuda.empty_cache()
-
-    if distributed:
-        rank, world_size = get_dist_info()
-
-        resulting_batch_size = torch.tensor(resulting_batch_size).cuda()
-        dist.all_reduce(resulting_batch_size, torch.distributed.ReduceOp.MIN)
-        print('rank', rank, 'resulting_batch_size', resulting_batch_size)
-
-        resulting_batch_size = int(resulting_batch_size.cpu())
-    else:
-        print('resulting_batch_size', resulting_batch_size)
-
-    return resulting_batch_size
-
-
-def init_dist_cpu(launcher, backend, **kwargs):
-    if mp.get_start_method(allow_none=True) is None:
-        mp.set_start_method('spawn')
-    if launcher == 'pytorch':
-        dist.init_process_group(backend=backend, **kwargs)
-    else:
-        raise ValueError(f'Invalid launcher type: {launcher}')
-
-
 def main():
     args = parse_args()
 
@@ -193,14 +106,7 @@ def main():
         distributed = False
     else:
         distributed = True
-        if torch.cuda.is_available():
-            init_dist(args.launcher, **cfg.dist_params)
-        else:
-            cfg.dist_params['backend'] = 'gloo'
-            init_dist_cpu(args.launcher, **cfg.dist_params)
-        # re-set gpu_ids with distributed training mode
-        _, world_size = get_dist_info()
-        cfg.gpu_ids = range(world_size)
+        init_dist(args.launcher, **cfg.dist_params)
 
     # create work_dir
     mmcv.mkdir_or_exist(osp.abspath(cfg.work_dir))
@@ -234,26 +140,6 @@ def main():
 
     model = build_posenet(cfg.model)
     datasets = [build_dataset(cfg.data.train)]
-
-    dataset_len_per_gpu = sum(len(dataset) for dataset in datasets)
-    if distributed:
-        dataset_len_per_gpu = dataset_len_per_gpu // get_dist_info()[1]
-    assert dataset_len_per_gpu > 0
-    if cfg.data.samples_per_gpu == 'auto':
-        if torch.cuda.is_available():
-            logger.info('Auto-selection of samples per gpu (batch size).')
-            cfg.data.samples_per_gpu = determine_max_batch_size(cfg, distributed, dataset_len_per_gpu)
-            logger.info(f'Auto selected batch size: {cfg.data.samples_per_gpu} {dataset_len_per_gpu}')
-            cfg.dump(osp.join(cfg.work_dir, osp.basename(args.config)))
-        else:
-            logger.warning('Auto-selection of batch size is not implemented for CPU.')
-            logger.warning('Setting batch size to value taken from configuration file.')
-            cfg.data.samples_per_gpu = cfg_samples_per_gpu
-    if dataset_len_per_gpu < cfg.data.samples_per_gpu:
-        cfg.data.samples_per_gpu = dataset_len_per_gpu
-        logger.warning(f'Decreased samples_per_gpu to: {cfg.data.samples_per_gpu} '
-                       f'because of dataset length: {dataset_len_per_gpu} '
-                       f'and gpus number: {get_dist_info()[1]}')
 
     if len(cfg.workflow) == 2:
         val_dataset = copy.deepcopy(cfg.data.val)

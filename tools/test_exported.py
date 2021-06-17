@@ -1,12 +1,13 @@
 import argparse
 import os
 import os.path as osp
-
+import numpy
 import mmcv
 import torch
+import cv2
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import get_dist_info, init_dist, load_checkpoint
-
+from mmpose.datasets.pipelines import Compose
 from mmpose.apis import multi_gpu_test, single_gpu_test
 from mmpose.core import wrap_fp16_model
 from mmpose.datasets import build_dataloader, build_dataset
@@ -16,6 +17,8 @@ from mmpose.utils.deployment.onnxruntime_backend import ModelONNXRuntime
 from mmpose.utils.deployment.openvino_backend import Model as ModelOpenVINO
 from mmpose.core.evaluation import (aggregate_results, get_group_preds,
                                     get_multi_stage_outputs)
+
+import inspect
 
 
 def parse_args():
@@ -53,6 +56,38 @@ def merge_configs(cfg1, cfg2):
             cfg1[k] = v
     return cfg1
 
+class LoadImage:
+    """A simple pipeline to load image."""
+
+    def __init__(self, color_type='color', channel_order='rgb'):
+        self.color_type = color_type
+        self.channel_order = channel_order
+
+    def __call__(self, results):
+        """Call function to load images into results.
+
+        Args:
+            results (dict): A result dict contains the img_or_path.
+
+        Returns:
+            dict: ``results`` will be returned containing loaded image.
+        """
+        if isinstance(results['img_or_path'], str):
+            results['image_file'] = results['img_or_path']
+            img = mmcv.imread(results['img_or_path'], self.color_type,
+                              self.channel_order)
+        elif isinstance(results['img_or_path'], np.ndarray):
+            results['image_file'] = ''
+            if self.color_type == 'color' and self.channel_order == 'rgb':
+                img = cv2.cvtColor(results['img_or_path'], cv2.COLOR_BGR2RGB)
+        else:
+            raise TypeError('"img_or_path" must be a numpy array or a str or '
+                            'a pathlib.Path object')
+
+        results['img'] = img
+        return results
+
+
 
 def main():
     args = parse_args()
@@ -85,6 +120,10 @@ def main():
 
     else:
         raise ValueError('Unknown model type.')
+    channel_order = cfg.test_pipeline[0].get('channel_order', 'rgb')
+    test_pipeline = [LoadImage(channel_order=channel_order)
+                     ] + cfg.test_pipeline[1:]
+    test_pipeline = Compose(test_pipeline)
 
     # build the dataloader
     dataset = build_dataset(cfg.data.test, dict(test_mode=True))
@@ -103,23 +142,24 @@ def main():
     dataset = data_loader.dataset
     prog_bar = mmcv.ProgressBar(len(dataset))
     for data in data_loader:
-        img_metas = data['img_metas'].data[0][0]
-        im_data = img_metas['aug_data'][0].cpu().numpy()
-        inference_result = model(im_data)
-
-        heatmaps = inference_result['heatmaps']
-        tags = inference_result['embeddings']
-
-        center = img_metas['center']
-        scale = img_metas['scale']
-        poses, scores = model.pt_model.keypoint_head.get_poses(heatmaps, tags, center, scale, model.pt_model.use_udp)
+        img_metas = data['img_metas'].data[0]
+        center, scale = img_metas[0]["center"],img_metas[0]["scale"]
+        w = scale[0] * 200 / 1.25
+        h = scale[1] * 200 / 1.25
+        x1 = int(center[0] - w/2) if int(center[0] - w/2)>0 else 0
+        x2 = int(center[0] + w/2) if int(center[0] + w/2)>0 else 0
+        y1 = int(center[1] - h/2) if int(center[1] - h/2)>0 else 0
+        y2 = int(center[1] + h/2) if int(center[1] + h/2)>0 else 0
+        im_data = cv2.imread(img_metas[0]['image_file'])
+        crop = im_data[y1:y2, x1:x2, :]
+        crop=cv2.resize(crop, (64,64))
+        crop = crop.transpose(2,0,1)
+        inference_result = model(crop)["3851"]
+        res = model.pt_model.keypoint_head.decode(img_metas, inference_result)
+        boxes = []
+        boxes.append(numpy.concatenate([img_metas[0]["center"],img_metas[0]["scale"],numpy.array([0,1,1])]))
         result = {}
-        result['preds'] = poses
-        result['scores'] = scores
-        result['image_paths'] = [img_metas['image_file']]
-        result['output_heatmap'] = None
-
-        outputs.append(result)
+        outputs.append(res)
 
         # use the first key as main key to calculate the batch size
         batch_size = len(next(iter(data.values())))

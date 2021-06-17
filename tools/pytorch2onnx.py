@@ -74,7 +74,7 @@ def pytorch2onnx(model,
         verbose=show,
         opset_version=opset_version,
         input_names=['image'],
-        output_names=['heatmaps', 'embeddings'],
+        output_names=['embeddings'],
         dynamic_axes = {
             "image": {
                 2: "height",
