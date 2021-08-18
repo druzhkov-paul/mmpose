@@ -138,14 +138,14 @@ class FaceWFLWDataset(FaceBaseDataset):
         info_str = []
 
         with open(res_file, 'r') as fin:
-            preds = json.load(fin)            
+            preds = json.load(fin)
         assert len(preds) == len(self.db)
 
         outputs = []
         gts = []
         masks = []
 
-        for pred, item in zip(preds, self.db):            
+        for pred, item in zip(preds, self.db):
             outputs.append(np.array(pred['keypoints'])[:, :-1])
             gts.append(np.array(item['joints_3d'])[:, :-1])
             masks.append((np.array(item['joints_3d_visible'])[:, 0]) > 0)
@@ -153,7 +153,6 @@ class FaceWFLWDataset(FaceBaseDataset):
         outputs = np.array(outputs)
         gts = np.array(gts)
         masks = np.array(masks)
-        
         if 'NME' in metrics:
             normalize_factor = self._get_normalize_factor(gts)
             info_str.append(
@@ -217,7 +216,6 @@ class FaceWFLWDataset(FaceBaseDataset):
                     'bbox_id': bbox_ids[i]
                 })
         kpts = self._sort_and_unique_bboxes(kpts)
-        
         self._write_keypoint_results(kpts, res_file)
         info_str = self._report_metric(res_file, metrics)
         name_value = OrderedDict(info_str)

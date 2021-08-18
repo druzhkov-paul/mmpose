@@ -70,7 +70,6 @@ def parse_args():
     return args
 
 
-
 def determine_max_batch_size(cfg, distributed, dataset_len_per_gpu):
     def get_fake_input(cfg, orig_img_shape=(128, 128, 3), device='cuda'):
         test_pipeline = [LoadImage()] + cfg.data.test.pipeline[1:]
