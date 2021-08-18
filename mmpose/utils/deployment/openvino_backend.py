@@ -63,8 +63,6 @@ class Model:
             if not np.array_equal(input_shape, blob_shape):
                 reshape_needed = True
                 break
-        print(input_shapes)
-        print(inputs)
         if reshape_needed:
             self.logger.info(f'reshape net to {input_shapes}')
             print(f'reshape net to {input_shapes}')
@@ -90,7 +88,7 @@ class Model:
     def __call__(self, inputs):
         inputs = self.unify_inputs(inputs)
         inputs = self.preprocess(inputs)
-        # self.reshape(inputs=inputs)
+        self.reshape(inputs=inputs)
         outputs = self.exec_net.infer(inputs)
         outputs = self.postprocess(outputs)
         return outputs

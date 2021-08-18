@@ -1,5 +1,5 @@
 albumentations>=0.3.2
-onnx==1.8.1
+onnx
 onnxruntime
 poseval@git+https://github.com/svenkreiss/poseval.git
 smplx

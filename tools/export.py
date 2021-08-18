@@ -77,7 +77,7 @@ def pytorch2onnx(model,
         verbose=show,
         opset_version=opset_version,
         input_names=['image'],
-        output_names=None,
+        output_names=['heatmaps', 'embeddings'],
         dynamic_axes = {
             "image": {
                 2: "height",
@@ -117,7 +117,7 @@ def pytorch2onnx(model,
 def export_to_openvino(cfg, onnx_model_path, output_dir_path, input_shape=None, input_format='rgb'):
     cfg.model.pretrained = None
 
-    output_names = ''
+    output_names = 'heatmaps,embeddings'
 
     # Channel order is defined by LoadImage transform. By default it is 'rgb'.
     channel_order = 'rgb'
@@ -126,10 +126,7 @@ def export_to_openvino(cfg, onnx_model_path, output_dir_path, input_shape=None, 
         print('read channel order from config')
         channel_order = load_image_stage[0].get('channel_order', 'rgb')
 
-    print (cfg.data.test.pipeline)
     normalize = [v for v in cfg.data.test.pipeline if v['type'] == 'NormalizeTensor'][0]
-    print(normalize)
-    print('read mean/std from config')
     # FIXME. Should those be reversed?
     mean_values = list(x * 255 for x in normalize['mean'])
     scale_values = list(x * 255 for x in normalize['std'])
