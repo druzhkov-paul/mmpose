@@ -1,12 +1,13 @@
 import argparse
 import os
 import os.path as osp
-
+import numpy
 import mmcv
 import torch
+import cv2
 from mmcv.parallel import MMDataParallel, MMDistributedDataParallel
 from mmcv.runner import get_dist_info, init_dist, load_checkpoint
-
+from mmpose.datasets.pipelines import Compose
 from mmpose.apis import multi_gpu_test, single_gpu_test
 from mmpose.core import wrap_fp16_model
 from mmpose.datasets import build_dataloader, build_dataset
@@ -72,17 +73,6 @@ def main():
         model = ModelONNXRuntime(args.model, cfg)
     elif args.model.endswith('.xml'):
         model = ModelOpenVINO(args.model, device=args.device, cfg=cfg)
-
-        # cfg.data.test.pipeline[0]['channel_order'] = 'bgr'
-        # bura = [v for v in cfg.data.test.pipeline if v['type'] == 'BottomUpResizeAlign'][0]
-        # print(bura)
-        # normalize = [v for v in bura['transforms'] if v['type'] == 'NormalizeTensor'][0]
-        # print(normalize)
-        # print('read mean/std from config')
-        # normalize['mean'] = [0, 0, 0]
-        # normalize['std'] = [1. / 255., 1. / 255., 1. / 255.]
-        # print(bura)
-
     else:
         raise ValueError('Unknown model type.')
 
@@ -98,26 +88,42 @@ def main():
     dataloader_setting = dict(dataloader_setting,
                               **cfg.data.get('test_dataloader', {}))
     data_loader = build_dataloader(dataset, **dataloader_setting)
-
     outputs = []
     dataset = data_loader.dataset
+    is_landmarks = dataset.dataset_name == 'wflw'
+
     prog_bar = mmcv.ProgressBar(len(dataset))
     for data in data_loader:
-        img_metas = data['img_metas'].data[0][0]
-        im_data = img_metas['aug_data'][0].cpu().numpy()
-        inference_result = model(im_data)
+        img_metas = data['img_metas'].data[0]
+        center = img_metas[0]["center"]
+        scale = img_metas[0]["scale"]
+        result = None
+        if is_landmarks:
+            w = scale[0] * 200 / 1.25
+            h = scale[1] * 200 / 1.25
+            x1 = int(center[0] - w/2) if int(center[0] - w/2)>0 else 0
+            x2 = int(center[0] + w/2) if int(center[0] + w/2)>0 else 0
+            y1 = int(center[1] - h/2) if int(center[1] - h/2)>0 else 0
+            y2 = int(center[1] + h/2) if int(center[1] + h/2)>0 else 0
+            im_data = cv2.imread(img_metas[0]['image_file'])
+            crop = im_data[y1:y2, x1:x2, :]
+            crop=cv2.resize(crop, (64,64))
+            crop = crop.transpose(2,0,1)
+            inference_result = model(crop)["3851"]
+            result = model.pt_model.keypoint_head.decode(img_metas, inference_result)
+        else:
+            im_data = img_metas[0]['aug_data'][0].cpu().numpy()
+            inference_result = model(im_data)
 
-        heatmaps = inference_result['heatmaps']
-        tags = inference_result['embeddings']
+            heatmaps = inference_result['heatmaps']
+            tags = inference_result['embeddings']
 
-        center = img_metas['center']
-        scale = img_metas['scale']
-        poses, scores = model.pt_model.keypoint_head.get_poses(heatmaps, tags, center, scale, model.pt_model.use_udp)
-        result = {}
-        result['preds'] = poses
-        result['scores'] = scores
-        result['image_paths'] = [img_metas['image_file']]
-        result['output_heatmap'] = None
+            poses, scores = model.pt_model.keypoint_head.get_poses(heatmaps, tags, center, scale, model.pt_model.use_udp)
+            result = {}
+            result['preds'] = poses
+            result['scores'] = scores
+            result['image_paths'] = [img_metas['image_file']]
+            result['output_heatmap'] = None
 
         outputs.append(result)
 

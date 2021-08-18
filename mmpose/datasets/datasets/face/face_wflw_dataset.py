@@ -205,7 +205,7 @@ class FaceWFLWDataset(FaceBaseDataset):
 
             batch_size = len(image_paths)
             for i in range(batch_size):
-                image_id = self.name2id[image_paths[i][len(self.img_prefix):]]
+                image_id = self.name2id[image_paths[i][len(self.img_prefix) + 1:]]
 
                 kpts.append({
                     'keypoints': preds[i].tolist(),
