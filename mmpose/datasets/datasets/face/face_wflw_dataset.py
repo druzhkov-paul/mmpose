@@ -153,6 +153,7 @@ class FaceWFLWDataset(FaceBaseDataset):
         outputs = np.array(outputs)
         gts = np.array(gts)
         masks = np.array(masks)
+
         if 'NME' in metrics:
             normalize_factor = self._get_normalize_factor(gts)
             info_str.append(
@@ -216,6 +217,7 @@ class FaceWFLWDataset(FaceBaseDataset):
                     'bbox_id': bbox_ids[i]
                 })
         kpts = self._sort_and_unique_bboxes(kpts)
+
         self._write_keypoint_results(kpts, res_file)
         info_str = self._report_metric(res_file, metrics)
         name_value = OrderedDict(info_str)
